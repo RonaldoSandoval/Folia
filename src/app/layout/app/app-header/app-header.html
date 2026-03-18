@@ -1,0 +1,35 @@
+<header class="h-14 bg-surface border-b border-border flex items-center justify-between gap-4 px-4 sticky top-0 z-40">
+
+  <!-- Left slot: empty in /app, populated in editor page -->
+  <div class="flex items-center gap-2 min-w-0 flex-1">
+    <ng-content select="[headerLeft]" />
+  </div>
+
+  <!-- Right: extra actions (projected) + standard controls -->
+  <div class="flex items-center gap-2 shrink-0">
+    <ng-content select="[headerActions]" />
+
+    <!-- Dark mode toggle -->
+    <button
+      type="button"
+      (click)="theme.toggle()"
+      class="p-2 rounded-lg text-icon hover:bg-surface-hover hover:text-foreground transition-colors duration-200"
+      [attr.aria-label]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'"
+      [attr.aria-pressed]="theme.isDark()"
+    >
+      @if (theme.isDark()) {
+        <lucide-icon [img]="Sun" class="my-icon w-5 h-5"></lucide-icon>
+      } @else {
+        <lucide-icon [img]="Moon" class="my-icon w-5 h-5"></lucide-icon>
+      }
+    </button>
+
+    <!-- User avatar with sign-out -->
+    <app-avatar
+      [name]="userName()"
+      [role]="userEmail()"
+      (signOutClick)="auth.signOut()"
+    />
+  </div>
+
+</header>

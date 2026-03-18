@@ -1,0 +1,39 @@
+<div class="flex flex-col gap-1.5">
+
+  <!-- Label (only rendered when provided) -->
+  @if (label()) {
+    <label class="text-sm font-medium text-foreground">
+      {{ label() }}
+    </label>
+  }
+
+  <!-- Input wrapper — positions the icon relative to the native input -->
+  <div class="relative">
+    @if (icon()) {
+      <lucide-icon
+        [img]="icon()!"
+        class="my-icon absolute left-3 top-1/2 -translate-y-1/2 text-icon pointer-events-none"
+        aria-hidden="true"
+      />
+    }
+
+    <input
+      [type]="type()"
+      [value]="value()"
+      [placeholder]="placeholder()"
+      [disabled]="disabled()"
+      [attr.aria-invalid]="hasError() ? 'true' : null"
+      [attr.aria-describedby]="hasError() ? 'field-error' : null"
+      (input)="onInput($event)"
+      [class]="inputClasses()"
+    />
+  </div>
+
+  <!-- Error message -->
+  @if (hasError()) {
+    <p id="field-error" class="text-xs text-danger-text">
+      {{ error() }}
+    </p>
+  }
+
+</div>

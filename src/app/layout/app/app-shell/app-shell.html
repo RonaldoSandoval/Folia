@@ -1,0 +1,65 @@
+<div class="max-w-6xl mx-auto px-4 py-8 space-y-10">
+
+  <!-- Header -->
+  <div class="space-y-2">
+    <h1 class="text-3xl font-bold text-foreground">Mis Documentos</h1>
+    <p class="text-secondary">Crea y gestiona tus documentos</p>
+  </div>
+
+  <!-- Primary action -->
+  <div>
+    <app-button [icon]="Plus" size="lg" (click)="createDocument()">
+      Crear Documento
+    </app-button>
+  </div>
+
+  <!-- Toolbar: search + sort -->
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+    <div class="flex-1 sm:max-w-md">
+      <app-text-field
+        [(value)]="searchTerm"
+        placeholder="Buscar documentos..."
+        [icon]="Search"
+      />
+    </div>
+
+    <div class="shrink-0">
+      <app-dropdown [items]="sortItems" (itemClick)="onSortChange($event)">
+        <app-button trigger variant="secondary" size="md" [icon]="ListFilter">
+          {{ currentSortLabel() }}
+          <lucide-icon [img]="ChevronDown" class="my-icon w-4 h-4 text-icon ml-1" aria-hidden="true" />
+        </app-button>
+      </app-dropdown>
+    </div>
+
+  </div>
+
+  <!-- Document list (handles its own empty state) -->
+  <app-document-list
+    [documents]="filteredDocuments()"
+    [searchActive]="searchTerm().length > 0"
+    (documentOpen)="openDocument($event)"
+    (documentRename)="renameDocument($event)"
+    (documentDelete)="deleteDocument($event)"
+  />
+
+</div>
+
+<!-- Rename dialog -->
+@if (renameTarget(); as doc) {
+  <app-rename-dialog
+    [currentTitle]="doc.title"
+    (confirm)="confirmRename($event)"
+    (cancel)="renameTarget.set(null)"
+  />
+}
+
+<!-- Delete confirmation dialog -->
+@if (deleteTarget(); as doc) {
+  <app-confirm-delete-dialog
+    [documentTitle]="doc.title"
+    (confirm)="confirmDelete()"
+    (cancel)="deleteTarget.set(null)"
+  />
+}

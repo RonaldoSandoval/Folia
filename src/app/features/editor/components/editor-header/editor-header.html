@@ -1,0 +1,96 @@
+<app-header>
+
+  <!-- Left slot -->
+  <div headerLeft class="flex items-center gap-2 min-w-0 h-8">
+
+    <!-- Files sidebar toggle -->
+    <button
+      type="button"
+      (click)="toggleFileClick.emit()"
+      [attr.aria-pressed]="filesOpen()"
+      [attr.aria-label]="filesOpen() ? 'Ocultar archivos' : 'Mostrar archivos'"
+      class="flex items-center justify-center h-8 w-8 rounded-lg transition-colors"
+      [class]="filesOpen()
+        ? 'bg-brand-subtle text-brand-text'
+        : 'text-icon hover:bg-surface-hover hover:text-foreground'"
+    >
+      <lucide-icon [img]="PanelLeft" class="w-4 h-4" aria-hidden="true" />
+    </button>
+
+    <div class="w-px h-5 bg-border shrink-0"></div>
+
+    <!-- Back -->
+    <app-button
+      variant="ghost"
+      size="sm"
+      class="h-8 flex items-center"
+      [icon]="ArrowLeft"
+      (click)="backClick.emit()"
+    >
+      Documentos
+    </app-button>
+
+    <div class="w-px h-5 bg-border shrink-0"></div>
+
+    <!-- Title + compile indicator -->
+    <span class="text-sm font-medium text-foreground truncate max-w-[20ch] leading-none">
+      {{ documentTitle() }}
+    </span>
+
+    @if (compiling()) {
+      <span class="flex items-center gap-1 shrink-0" aria-label="Compilando">
+        <span class="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"></span>
+        <span class="w-1.5 h-1.5 rounded-full bg-brand animate-pulse [animation-delay:150ms]"></span>
+        <span class="w-1.5 h-1.5 rounded-full bg-brand animate-pulse [animation-delay:300ms]"></span>
+      </span>
+    }
+
+  </div>
+
+  <!-- Right slot -->
+  <div headerActions class="flex items-center gap-2 h-8">
+
+    <!-- Download -->
+    <app-button
+      variant="ghost"
+      size="sm"
+      class="h-8 flex items-center justify-center"
+      [icon]="Download"
+      (click)="downloadClick.emit()"
+    ></app-button>
+
+    <!-- Save status label -->
+    @if (saveStatus() !== 'guardado') {
+      <span class="text-xs text-muted shrink-0">
+        {{ saveStatus() === 'guardando' ? 'Guardando...' : 'Sin guardar' }}
+      </span>
+    }
+
+    <!-- Save -->
+    <app-button
+      variant="secondary"
+      size="sm"
+      class="h-8 flex items-center justify-center"
+      [icon]="Save"
+      (click)="saveClick.emit()"
+    ></app-button>
+
+    <div class="w-px h-5 bg-border shrink-0"></div>
+
+    <!-- Chat toggle -->
+    <button
+      type="button"
+      (click)="toggleChatClick.emit()"
+      [attr.aria-pressed]="chatOpen()"
+      aria-label="Asistente IA"
+      class="flex items-center justify-center h-8 w-8 rounded-lg transition-colors"
+      [class]="chatOpen()
+        ? 'bg-brand-subtle text-brand-text'
+        : 'text-icon hover:bg-surface-hover hover:text-foreground'"
+    >
+      <lucide-icon [img]="MessageSquare" class="w-4 h-4" aria-hidden="true" />
+    </button>
+
+  </div>
+
+</app-header>

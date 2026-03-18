@@ -1,0 +1,70 @@
+<aside
+  class="flex flex-col h-screen bg-surface border-r border-border transition-all duration-300 ease-in-out"
+  [ngClass]="isCollapsed() ? 'w-16' : 'w-60'"
+  aria-label="Sidebar"
+>
+
+  <!-- Header -->
+  <div
+    class="flex items-center h-16 px-3 border-b border-divider shrink-0"
+    [ngClass]="isCollapsed() ? 'justify-center' : 'justify-between'"
+  >
+    <!-- Wordmark — hidden when collapsed -->
+    @if (!isCollapsed()) {
+      <span class="text-foreground font-bold text-base tracking-tight select-none pl-1">
+        Typs<span class="text-brand">.</span>
+      </span>
+    }
+
+    <!-- Collapse toggle -->
+    <button
+      type="button"
+      (click)="toggleSidebar()"
+      class="p-1.5 rounded-lg text-icon hover:bg-surface-hover hover:text-foreground transition-colors duration-150 shrink-0"
+      aria-label="Toggle sidebar"
+      [attr.aria-expanded]="!isCollapsed()"
+    >
+      <lucide-icon
+        [img]="ChevronLeft"
+        class="inline-block w-4 h-4 transition-transform duration-300"
+        [class.rotate-180]="isCollapsed()"
+      />
+    </button>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="flex-1 px-2 py-4 overflow-y-auto" aria-label="Main navigation">
+
+    <!-- Section label -->
+    @if (!isCollapsed()) {
+      <p class="px-3 pb-2 text-xs font-semibold uppercase tracking-widest text-muted select-none">
+        Workspace
+      </p>
+    }
+
+    <ul class="space-y-0.5">
+      @for (item of navItems; track item.href) {
+        <li>
+          <a
+            [routerLink]="item.href"
+            routerLinkActive="bg-surface-hover text-foreground"
+            class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 group text-secondary hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-brand/30"
+            [ngClass]="isCollapsed() ? 'justify-center' : ''"
+            [attr.title]="isCollapsed() ? item.label : null"
+          >
+            <lucide-icon
+              [img]="item.icon"
+              class="my-icon w-4 h-4 shrink-0 text-icon group-hover:text-foreground transition-colors"
+              aria-hidden="true"
+            />
+            @if (!isCollapsed()) {
+              <span class="truncate">{{ item.label }}</span>
+            }
+          </a>
+        </li>
+      }
+    </ul>
+
+  </nav>
+
+</aside>

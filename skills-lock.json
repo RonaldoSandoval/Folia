@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "skills": {
+    "angular-best-practices": {
+      "source": "alfredoperez/angular-best-practices",
+      "sourceType": "github",
+      "computedHash": "a374af88ef90921a10130614e3c4861e1aab99a5c29b089e599618fef3ba4fca"
+    },
+    "angular-best-practices-material": {
+      "source": "alfredoperez/angular-best-practices",
+      "sourceType": "github",
+      "computedHash": "228af942474dea311d22bed4791afc4e5eda14377cef2c838f9f53db9d148c19"
+    },
+    "angular-best-practices-ngrx": {
+      "source": "alfredoperez/angular-best-practices",
+      "sourceType": "github",
+      "computedHash": "9afa2b68f17f775da9a8cdc7537fd48f99f3d819a40990d0ea89dba52457bf64"
+    },
+    "angular-best-practices-primeng": {
+      "source": "alfredoperez/angular-best-practices",
+      "sourceType": "github",
+      "computedHash": "65b76cc174bb87c2725de2d24e67e61e84637ebb1e79ad170fdb37b5301c8367"
+    },
+    "angular-best-practices-rule-creator": {
+      "source": "alfredoperez/angular-best-practices",
+      "sourceType": "github",
+      "computedHash": "331e866a3a2d97bac31ba5c9dcd8589d9de427c10614ea6f59164a0a4a3f6c94"
+    },
+    "angular-best-practices-signalstore": {
+      "source": "alfredoperez/angular-best-practices",
+      "sourceType": "github",
+      "computedHash": "34ccdfc82937be2ca4429ef265954bc17d09507232b451d8143d72a94f0cf44d"
+    },
+    "angular-best-practices-transloco": {
+      "source": "alfredoperez/angular-best-practices",
+      "sourceType": "github",
+      "computedHash": "ba5cec75f412cd92ce13cb87bb79e5ef6b2b1c94af6665c6804a6929a8094b65"
+    },
+    "angular-component": {
+      "source": "analogjs/angular-skills",
+      "sourceType": "github",
+      "computedHash": "9d2fb6fbec5a8a9fd029e125194ba749b717b1fefef1cf5cd6f7a67d5b7bc364"
+    },
+    "angular-di": {
+      "source": "analogjs/angular-skills",
+      "sourceType": "github",
+      "computedHash": "b7e4fa9c9cc06eba5b2057cc0da024a015fa0af301c3654f34a5c3ec9160d7c6"
+    },
+    "angular-directives": {
+      "source": "analogjs/angular-skills",
+      "sourceType": "github",
+      "computedHash": "a96e63582eb4350cd6bfe0fbdad2585d999f3ed567c05fd2f99544769977a2e3"
+    },
+    "angular-forms": {
+      "source": "analogjs/angular-skills",
+      "sourceType": "github",
+      "computedHash": "b6d99388e6efbd7006b0729a0a8bb2346b30214afc1a369a71d31f076c95d6a6"
+    },
+    "angular-http": {
+      "source": "analogjs/angular-skills",
+      "sourceType": "github",
+      "computedHash": "251aab8c4417ee6fc22187eaf9a88ae1a08613d201b65d1d0ec48ba4807f53eb"
+    },
+    "angular-routing": {
+      "source": "analogjs/angular-skills",
+      "sourceType": "github",
+      "computedHash": "cd02400200c70c1c8544ac6deb589269275fd33a7d6b93728bf8127cc2f0c71e"
+    },
+    "angular-signals": {
+      "source": "analogjs/angular-skills",
+      "sourceType": "github",
+      "computedHash": "3c81e0d5622c38ba42699895c50b3363130f2c2c6f74faf3402302e40f6ccbb9"
+    }
+  }
+}

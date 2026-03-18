@@ -1,0 +1,45 @@
+<div class="min-h-screen bg-background flex flex-col">
+
+  <!-- Top bar -->
+  <header class="flex items-center h-16 px-8 border-b border-border shrink-0">
+    <span class="text-foreground font-bold text-lg tracking-tight select-none">
+      Typs<span class="text-brand">.</span>
+    </span>
+  </header>
+
+  <!-- Hero -->
+  <main class="flex-1 flex flex-col items-center justify-center px-6 text-center gap-8">
+
+    <!-- Badge -->
+    <span
+      class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
+             bg-brand-subtle text-brand-text border border-brand/20"
+    >
+      Potenciado con IA
+    </span>
+
+    <!-- Headline -->
+    <div class="flex flex-col gap-3 max-w-2xl">
+      <h1 class="text-5xl font-bold tracking-tight text-foreground leading-tight">
+        Escribe documentos<br />
+        <span class="text-brand">bellos y precisos</span>
+      </h1>
+      <p class="text-lg text-secondary max-w-lg mx-auto">
+        Un editor Typst colaborativo con asistente de IA integrado.
+        Redacta, compila y comparte documentos profesionales en segundos.
+      </p>
+    </div>
+
+    <!-- CTA -->
+    <app-button size="lg" [icon]="ArrowRight" (click)="goToApp()">
+      Empezar
+    </app-button>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-6 text-center text-xs text-muted border-t border-divider">
+    &copy; 2026 Typs. Todos los derechos reservados.
+  </footer>
+
+</div>

@@ -1,0 +1,98 @@
+<div class="min-h-screen bg-background flex flex-col">
+
+  <!-- Top bar -->
+  <header class="flex items-center h-16 px-8 border-b border-border shrink-0">
+    <span class="text-foreground font-bold text-lg tracking-tight select-none">
+      Typs<span class="text-brand">.</span>
+    </span>
+  </header>
+
+  <!-- Main -->
+  <main class="flex-1 flex items-center justify-center px-6">
+
+    <div class="w-full max-w-sm flex flex-col gap-6">
+
+      <!-- Title -->
+      <div class="text-center">
+        <h1 class="text-2xl font-bold text-foreground">
+          @if (mode() === 'login') { Iniciar sesión } @else { Crear cuenta }
+        </h1>
+        <p class="text-sm text-secondary mt-1">
+          @if (mode() === 'login') {
+            Bienvenido de nuevo a Typs.
+          } @else {
+            Comienza a escribir documentos bellos.
+          }
+        </p>
+      </div>
+
+      <!-- Confirm email notice (shown after successful signup) -->
+      @if (signupState() === 'confirm') {
+        <div class="rounded-lg border border-brand/30 bg-brand-subtle px-4 py-3 text-sm text-brand-text text-center">
+          Revisa tu correo y confirma tu cuenta para continuar.
+        </div>
+      } @else {
+
+        <!-- Form -->
+        <form class="flex flex-col gap-4" (submit)="$event.preventDefault(); submit()">
+
+          <app-text-field
+            label="Correo electrónico"
+            type="email"
+            placeholder="tu@email.com"
+            [icon]="Mail"
+            [(value)]="email"
+          />
+
+          <app-text-field
+            label="Contraseña"
+            type="password"
+            placeholder="••••••••"
+            [icon]="Lock"
+            [(value)]="password"
+          />
+
+          <!-- Error -->
+          @if (auth.error()) {
+            <p class="text-sm text-danger text-center">{{ auth.error() }}</p>
+          }
+
+          <app-button
+            type="submit"
+            size="lg"
+            [disabled]="auth.loading()"
+            class="w-full mt-1"
+          >
+            @if (auth.loading()) {
+              Cargando…
+            } @else if (mode() === 'login') {
+              Entrar
+            } @else {
+              Registrarme
+            }
+          </app-button>
+
+        </form>
+
+        <!-- Toggle -->
+        <p class="text-sm text-secondary text-center">
+          @if (mode() === 'login') {
+            ¿No tienes cuenta?
+          } @else {
+            ¿Ya tienes cuenta?
+          }
+          <button
+            type="button"
+            class="text-brand font-medium hover:underline ml-1 cursor-pointer"
+            (click)="toggleMode()"
+          >
+            @if (mode() === 'login') { Regístrate } @else { Inicia sesión }
+          </button>
+        </p>
+
+      }
+
+    </div>
+  </main>
+
+</div>

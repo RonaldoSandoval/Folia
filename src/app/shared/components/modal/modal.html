@@ -1,0 +1,36 @@
+<!-- Backdrop -->
+<div
+  class="fixed inset-0 z-50 flex items-center justify-center p-4
+         bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
+  (click)="onBackdropClick($event)"
+  aria-modal="true"
+  role="dialog"
+  [attr.aria-label]="title()"
+>
+  <!-- Panel -->
+  <div
+    #panel
+    class="relative w-full max-w-md bg-surface rounded-2xl shadow-xl
+           border border-border
+           animate-in zoom-in-95 duration-150"
+  >
+    <!-- Header -->
+    <div class="flex items-center justify-between px-5 pt-5 pb-4 border-b border-divider">
+      <h2 class="text-base font-semibold text-foreground">{{ title() }}</h2>
+      <button
+        type="button"
+        class="p-1.5 rounded-lg text-icon hover:bg-surface-hover hover:text-foreground
+               transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40"
+        aria-label="Cerrar"
+        (click)="close.emit()"
+      >
+        <lucide-icon [img]="X" class="w-4 h-4" aria-hidden="true" />
+      </button>
+    </div>
+
+    <!-- Projected content -->
+    <div class="px-5 py-4">
+      <ng-content />
+    </div>
+  </div>
+</div>

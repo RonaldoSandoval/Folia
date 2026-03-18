@@ -1,0 +1,63 @@
+<div class="relative inline-block">
+
+  <!-- Avatar trigger -->
+  <button
+    type="button"
+    (click)="toggle()"
+    class="flex items-center justify-center w-9 h-9 rounded-full bg-brand text-white font-semibold text-sm select-none hover:ring-2 hover:ring-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/40 transition-all duration-200"
+    [attr.aria-label]="'Open menu for ' + name()"
+    [attr.aria-expanded]="isOpen()"
+    [attr.aria-haspopup]="'menu'"
+  >
+    {{ initials() }}
+  </button>
+
+  <!-- Dropdown panel -->
+  @if (isOpen()) {
+  <div
+    class="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-border bg-surface shadow-xl origin-top-right"
+    role="menu"
+    [attr.aria-hidden]="!isOpen()"
+  >
+
+    <!-- User info header — non-interactive -->
+    <div class="flex items-center gap-3 px-4 py-3.5 border-b border-divider">
+      <div class="flex items-center justify-center w-9 h-9 rounded-full bg-brand text-white font-semibold text-sm shrink-0 select-none">
+        {{ initials() }}
+      </div>
+      <div class="flex flex-col min-w-0">
+        <span class="text-sm font-semibold text-foreground truncate">{{ name() }}</span>
+        <span class="text-xs text-muted truncate">{{ role() }}</span>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="p-1.5">
+
+      <button
+        type="button"
+        role="menuitem"
+        (click)="onProfileClick()"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:bg-surface-hover hover:text-foreground transition-colors duration-150 cursor-pointer"
+      >
+        <lucide-icon [img]="User" class="my-icon w-4 h-4 shrink-0" aria-hidden="true" />
+        Profile
+      </button>
+
+      <div role="separator" class="my-1 -mx-1.5 border-t border-divider"></div>
+
+      <button
+        type="button"
+        role="menuitem"
+        (click)="onSignOutClick()"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-danger-text hover:bg-danger-subtle transition-colors duration-150 cursor-pointer"
+      >
+        <lucide-icon [img]="LogOut" class="my-icon w-4 h-4 shrink-0" aria-hidden="true" />
+        Sign Out
+      </button>
+
+    </div>
+  </div>
+  }
+
+</div>

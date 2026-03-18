@@ -1,0 +1,79 @@
+<!-- Document grid -->
+@if (documents().length > 0) {
+  <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    @for (doc of documents(); track doc.id) {
+      <li>
+        <article
+          class="group relative flex flex-col gap-4 p-5 rounded-xl border border-border bg-surface hover:border-brand/30 hover:shadow-md cursor-pointer transition-all duration-200"
+          (click)="documentOpen.emit(doc)"
+          [attr.aria-label]="'Open ' + doc.title"
+          role="button"
+          tabindex="0"
+        >
+          <!-- Top row: file icon + context menu -->
+          <div class="flex items-start justify-between gap-2">
+
+            <!-- File icon badge -->
+            <div class="w-10 h-10 rounded-lg bg-brand-subtle flex items-center justify-center shrink-0">
+              <lucide-icon [img]="FileText" class="my-icon w-5 h-5 text-brand-icon" aria-hidden="true" />
+            </div>
+
+            <!-- Context menu — stopPropagation prevents opening the document -->
+            <div (click)="$event.stopPropagation()" class="shrink-0">
+              <app-dropdown
+                [items]="cardMenuItems"
+                (itemClick)="onMenuAction(doc, $event)"
+                align="right"
+              >
+                <button
+                  trigger
+                  type="button"
+                  [attr.aria-label]="'Options for ' + doc.title"
+                  class="p-1.5 rounded-lg text-icon opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 transition-all duration-150"
+                >
+                  <lucide-icon [img]="MoreHorizontal" class="my-icon w-4 h-4" aria-hidden="true" />
+                </button>
+              </app-dropdown>
+            </div>
+          </div>
+
+          <!-- Document info -->
+          <div class="flex flex-col gap-0.5">
+            <p class="text-sm font-semibold text-foreground truncate leading-snug">
+              {{ doc.title }}
+            </p>
+            <p class="text-xs text-muted">
+              {{ relativeTime(doc.updatedAt) }}
+            </p>
+          </div>
+
+        </article>
+      </li>
+    }
+  </ul>
+}
+
+<!-- Empty state -->
+@if (documents().length === 0) {
+  <div class="flex flex-col items-center justify-center py-20 gap-5 text-center">
+
+    <div class="w-16 h-16 rounded-2xl bg-surface-hover flex items-center justify-center">
+      @if (searchActive()) {
+        <lucide-icon [img]="Search" class="my-icon w-7 h-7 text-icon" aria-hidden="true" />
+      } @else {
+        <lucide-icon [img]="FileText" class="my-icon w-7 h-7 text-icon" aria-hidden="true" />
+      }
+    </div>
+
+    <div class="flex flex-col gap-1">
+      @if (searchActive()) {
+        <p class="text-sm font-semibold text-foreground">No se encontraron documentos</p>
+        <p class="text-sm text-muted">Intenta con un término de búsqueda diferente</p>
+      } @else {
+        <p class="text-sm font-semibold text-foreground">No tienes documentos aún</p>
+        <p class="text-sm text-muted">Crea tu primer documento para empezar</p>
+      }
+    </div>
+
+  </div>
+}

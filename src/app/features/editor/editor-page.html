@@ -1,0 +1,110 @@
+<div class="flex flex-col h-screen bg-background overflow-hidden">
+
+  <!-- ══ Editor Header ════════════════════════════════════════════════════ -->
+  <app-editor-header
+    [documentId]="documentId"
+    [documentTitle]="documentTitle()"
+    [filesOpen]="filesOpen()"
+    [chatOpen]="chatOpen()"
+    [compiling]="compiling()"
+    [saveStatus]="saveStatus()"
+    (toggleFileClick)="toggleFile()"
+    (toggleChatClick)="toggleChat()"
+    (backClick)="goBack()"
+    (saveClick)="saveDocument()"
+    (downloadClick)="download()"
+  />
+
+  <!-- ══ Body ═════════════════════════════════════════════════════════════ -->
+  <div class="flex flex-1 overflow-hidden relative">
+
+    <!-- ① Files sidebar -->
+    @if (filesOpen()) {
+      <aside class="flex flex-col w-52 shrink-0 border-r border-border bg-surface overflow-hidden">
+        <app-files-sidebar
+          [files]="projectFiles()"
+          [activeFile]="activeFile()"
+          [imageFiles]="imageFiles()"
+          (fileSelect)="onFileSelect($event)"
+          (fileCreate)="onFileCreate()"
+          (fileDelete)="onFileDelete($event)"
+          (imageUpload)="onImageUpload($event)"
+          (imageRename)="onImageRename($event)"
+          (imageDelete)="onImageDelete($event)"
+        />
+      </aside>
+    }
+
+    <!-- ② Editor + resize handle + Preview -->
+    <div #resizeContainer class="flex flex-1 overflow-hidden">
+
+      <!-- Editor panel -->
+      <div
+        class="flex flex-col overflow-hidden"
+        [style.width.%]="editorWidthPct()"
+      >
+        <div class="flex items-center h-8 px-3 border-b border-divider bg-surface shrink-0">
+          <span class="text-xs font-medium text-muted uppercase tracking-wider select-none">
+            Editor
+          </span>
+        </div>
+        <div class="flex-1 overflow-hidden">
+          <app-editor-panel
+            (contentChange)="onContentChange($event)"
+          />
+        </div>
+      </div>
+
+      <!-- Drag handle -->
+      <div
+        class="w-1 shrink-0 bg-border hover:bg-brand active:bg-brand cursor-col-resize
+               transition-colors duration-150 select-none"
+        (mousedown)="startResize($event)"
+        title="Arrastra para redimensionar"
+      ></div>
+
+      <!-- Preview panel -->
+      <div class="flex flex-col flex-1 overflow-hidden">
+        <div class="flex items-center h-8 px-3 border-b border-divider bg-surface shrink-0 gap-3">
+          <span class="text-xs font-medium text-muted uppercase tracking-wider select-none flex-1">
+            Vista previa
+          </span>
+
+          @if (compileError()) {
+            <span
+              class="text-xs text-red-500 truncate max-w-xs"
+              [title]="compileError()!"
+            >
+              {{ compileError() }}
+            </span>
+          }
+
+          @if (compiling()) {
+            <span class="text-xs text-muted flex items-center gap-1.5">
+              <svg class="w-3 h-3 animate-spin text-brand" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+              </svg>
+              Compilando
+            </span>
+          }
+        </div>
+        <app-preview-panel [vectorData]="vectorData()" />
+      </div>
+
+    </div>
+
+    <!-- ③ Chat sidebar overlay (slides in from right) -->
+    <aside
+      class="absolute top-0 right-0 bottom-0 w-80 flex flex-col
+             bg-surface border-l border-border z-20
+             transition-transform duration-300 ease-in-out"
+      [class.translate-x-0]="chatOpen()"
+      [class.translate-x-full]="!chatOpen()"
+    >
+      <app-chat-panel (insertContent)="appendToContent($event)" />
+    </aside>
+
+  </div>
+
+</div>

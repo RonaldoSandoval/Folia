@@ -1,0 +1,164 @@
+<!-- Hidden file input — triggered programmatically -->
+<input
+  #fileInput
+  type="file"
+  class="hidden"
+  [accept]="ACCEPTED_IMAGE_TYPES"
+  multiple
+  (change)="onFilesSelected($event)"
+/>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<div class="flex items-center justify-between h-9 px-3 border-b border-divider shrink-0">
+  <span class="text-xs font-semibold uppercase tracking-widest text-muted select-none">
+    Archivos
+  </span>
+  <div class="flex items-center gap-0.5">
+    <button
+      type="button"
+      title="Subir imagen"
+      class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground transition-colors"
+      (click)="openImagePicker()"
+    >
+      <lucide-icon [img]="ImagePlus" class="w-3.5 h-3.5" aria-hidden="true" />
+    </button>
+    <button
+      type="button"
+      title="Agregar archivo"
+      class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground transition-colors"
+      (click)="fileCreate.emit()"
+    >
+      <lucide-icon [img]="FilePlus" class="w-3.5 h-3.5" aria-hidden="true" />
+    </button>
+  </div>
+</div>
+
+<!-- ── .typ file list ───────────────────────────────────────────────────── -->
+<ul class="overflow-y-auto py-1" [class.flex-1]="imageFiles().length === 0">
+  @for (file of files(); track file.name) {
+    <li class="group relative">
+      <button
+        type="button"
+        (click)="fileSelect.emit(file.name)"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-sm truncate transition-colors
+               focus:outline-none focus:ring-inset focus:ring-1 focus:ring-brand/40 pr-8"
+        [class]="file.name === activeFile()
+          ? 'bg-brand-subtle text-brand-text font-medium'
+          : 'text-secondary hover:bg-surface-hover hover:text-foreground'"
+      >
+        <lucide-icon [img]="FileText" class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+        <span class="truncate">{{ file.name }}</span>
+      </button>
+
+      @if (!isSingleFile() && file.name !== activeFile()) {
+        <button
+          type="button"
+          title="Eliminar archivo"
+          class="absolute right-1.5 top-1/2 -translate-y-1/2
+                 p-1 rounded text-icon opacity-0 group-hover:opacity-100
+                 hover:text-danger hover:bg-danger-subtle transition-all"
+          (click)="fileDelete.emit(file.name)"
+        >
+          <lucide-icon [img]="Trash2" class="w-3 h-3" aria-hidden="true" />
+        </button>
+      }
+    </li>
+  }
+</ul>
+
+<!-- ── Images section ──────────────────────────────────────────────────── -->
+@if (imageFiles().length > 0) {
+  <div class="flex flex-col flex-1 overflow-hidden border-t border-divider min-h-0">
+
+    <!-- Section header -->
+    <div class="flex items-center h-7 px-3 shrink-0">
+      <span class="text-xs font-semibold uppercase tracking-widest text-muted select-none">
+        Imágenes
+      </span>
+    </div>
+
+    <ul class="flex-1 overflow-y-auto py-1">
+      @for (img of imageFiles(); track img.name) {
+        <li class="group">
+
+          @if (renamingName() === img.name) {
+            <!-- ── Rename mode ── -->
+            <div class="flex items-center gap-1.5 px-2 py-1">
+              <img
+                [src]="img.previewUrl"
+                [alt]="img.name"
+                class="w-6 h-6 object-cover rounded shrink-0 border border-divider"
+              />
+              <input
+                #renameInput
+                type="text"
+                class="flex-1 min-w-0 text-xs bg-surface border border-brand rounded
+                       px-1.5 py-0.5 text-foreground focus:outline-none"
+                [value]="renameValue()"
+                (input)="renameValue.set($any($event.target).value)"
+                (keydown)="onRenameKeydown($event)"
+              />
+              <button
+                type="button"
+                title="Confirmar"
+                class="p-0.5 rounded text-green-500 hover:text-green-400 transition-colors shrink-0"
+                (click)="confirmRename()"
+              >
+                <lucide-icon [img]="Check" class="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                title="Cancelar"
+                class="p-0.5 rounded text-muted hover:text-foreground transition-colors shrink-0"
+                (click)="cancelRename()"
+              >
+                <lucide-icon [img]="X" class="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </div>
+
+          } @else {
+            <!-- ── Normal mode ── -->
+            <div
+              class="flex items-center gap-2 px-3 py-1.5
+                     text-secondary hover:bg-surface-hover hover:text-foreground
+                     transition-colors"
+            >
+              <img
+                [src]="img.previewUrl"
+                [alt]="img.name"
+                class="w-5 h-5 object-cover rounded shrink-0 border border-divider"
+              />
+              <span
+                class="truncate flex-1 text-xs cursor-default select-none"
+                title="Doble clic para renombrar"
+                (dblclick)="startRename(img.name)"
+              >
+                {{ img.name }}
+              </span>
+              <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">
+                <button
+                  type="button"
+                  title='Copiar sintaxis Typst'
+                  class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground transition-colors"
+                  (click)="copyImageSyntax(img.name)"
+                >
+                  <lucide-icon [img]="Copy" class="w-3 h-3" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  title="Eliminar imagen"
+                  class="p-1 rounded text-icon hover:text-danger hover:bg-danger-subtle transition-colors"
+                  (click)="imageDelete.emit(img.name)"
+                >
+                  <lucide-icon [img]="Trash2" class="w-3 h-3" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          }
+
+        </li>
+      }
+    </ul>
+
+  </div>
+}

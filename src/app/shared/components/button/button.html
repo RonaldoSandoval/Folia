@@ -1,0 +1,15 @@
+<button
+  [type]="type()"
+  [disabled]="disabled() || loading()"
+  [class]="buttonClasses()"
+>
+  @if (loading()) {
+    <!-- Spinner replaces content while the action is in progress -->
+    <app-spinner size="sm" [color]="spinnerColor()" label="Cargando..." />
+  } @else {
+    @if (icon()) {
+      <lucide-icon [img]="icon()!" class="my-icon w-4 h-4 shrink-0" aria-hidden="true" />
+    }
+    <ng-content />
+  }
+</button>

@@ -1,3 +1,134 @@
-/* You can add global styles to this file, and also import other style files */
-
 @import "tailwindcss";
+
+/* ============================================================
+   Design Tokens — Light Mode
+   Semantic CSS custom properties that drive every color in the
+   app. Components never reference raw palette values (gray-200,
+   emerald-500…) directly — they use these tokens via the
+   Tailwind utility classes generated in @theme inline below.
+   ============================================================ */
+@layer base {
+  :root {
+    /* --- Surfaces ------------------------------------------------ */
+    --typs-background:    var(--color-white);       /* Page background */
+    --typs-surface:       var(--color-white);       /* Component bg (sidebar, header, cards) */
+    --typs-surface-hover: var(--color-gray-100);    /* Generic interactive hover background */
+
+    /* --- Borders ------------------------------------------------- */
+    --typs-border:  var(--color-gray-200);          /* Standard borders */
+    --typs-divider: var(--color-gray-100);          /* Subtle internal dividers */
+
+    /* --- Text ---------------------------------------------------- */
+    --typs-foreground: var(--color-gray-900);       /* Primary text */
+    --typs-secondary:  var(--color-gray-600);       /* Secondary / body text */
+    --typs-muted:      var(--color-gray-500);       /* Placeholder, helper, empty-state text */
+    --typs-icon:       var(--color-gray-400);       /* Default resting icon color */
+
+    /* --- Brand (emerald) ----------------------------------------- */
+    --typs-brand:        var(--color-emerald-500);  /* Filled brand elements (avatar, primary btn) */
+    --typs-brand-subtle: var(--color-emerald-50);   /* Tinted brand hover background */
+    --typs-brand-text:   var(--color-emerald-700);  /* Brand-colored text on a light surface */
+    --typs-brand-icon:   var(--color-emerald-600);  /* Brand-colored icon on a light surface */
+    --typs-brand-deep:   var(--color-emerald-700);  /* Deepest brand shade — gradient hover end stop */
+
+    /* --- Danger (red) -------------------------------------------- */
+    --typs-danger:        var(--color-red-500);     /* Danger rings and filled danger elements */
+    --typs-danger-subtle: var(--color-red-50);      /* Tinted danger hover background */
+    --typs-danger-text:   var(--color-red-600);     /* Danger-colored text and icons */
+  }
+
+  /* ============================================================
+     Design Tokens — Dark Mode
+     Redefine the semantic tokens above for dark surfaces.
+     Every Tailwind utility that references a --typs-* variable
+     will update automatically when the .dark class is applied
+     to <html> — no additional CSS needed in components.
+     ============================================================ */
+  .dark {
+    --typs-background:    var(--color-gray-950);
+    --typs-surface:       var(--color-gray-900);
+    --typs-surface-hover: var(--color-gray-800);
+
+    --typs-border:  var(--color-gray-700);
+    --typs-divider: var(--color-gray-800);
+
+    --typs-foreground: var(--color-gray-50);
+    --typs-secondary:  var(--color-gray-400);
+    --typs-muted:      var(--color-gray-500);
+    --typs-icon:       var(--color-gray-500);
+
+    --typs-brand:        var(--color-emerald-400);
+    --typs-brand-subtle: var(--color-emerald-950);
+    --typs-brand-text:   var(--color-emerald-300);
+    --typs-brand-icon:   var(--color-emerald-500);
+    --typs-brand-deep:   var(--color-emerald-600);  /* Deepest brand shade — gradient hover end stop */
+
+    --typs-danger:        var(--color-red-400);
+    --typs-danger-subtle: var(--color-red-950);
+    --typs-danger-text:   var(--color-red-400);
+  }
+}
+
+/* ============================================================
+   Tailwind Theme Integration
+   Maps --typs-* tokens to Tailwind utility names.
+
+   The `inline` keyword tells Tailwind to embed the CSS variable
+   reference directly into each generated utility instead of
+   emitting a new --color-* CSS variable. This preserves runtime
+   reactivity: toggling .dark on <html> swaps all colors with
+   zero additional CSS.
+
+   Generated class examples:
+     bg-background    → background-color: var(--typs-background)
+     text-foreground  → color:            var(--typs-foreground)
+     border-border    → border-color:     var(--typs-border)
+     ring-brand       → --tw-ring-color:  var(--typs-brand)
+   ============================================================ */
+@theme inline {
+  /* Surfaces */
+  --color-background:    var(--typs-background);
+  --color-surface:       var(--typs-surface);
+  --color-surface-hover: var(--typs-surface-hover);
+
+  /* Borders */
+  --color-border:  var(--typs-border);
+  --color-divider: var(--typs-divider);
+
+  /* Text */
+  --color-foreground: var(--typs-foreground);
+  --color-secondary:  var(--typs-secondary);
+  --color-muted:      var(--typs-muted);
+  --color-icon:       var(--typs-icon);
+
+  /* Brand */
+  --color-brand:        var(--typs-brand);
+  --color-brand-subtle: var(--typs-brand-subtle);
+  --color-brand-text:   var(--typs-brand-text);
+  --color-brand-icon:   var(--typs-brand-icon);
+  --color-brand-deep:   var(--typs-brand-deep);
+
+  /* Danger */
+  --color-danger:        var(--typs-danger);
+  --color-danger-subtle: var(--typs-danger-subtle);
+  --color-danger-text:   var(--typs-danger-text);
+}
+
+/* ============================================================
+   Global Component Utilities
+   ============================================================ */
+@layer components {
+  /**
+   * Base styles for all Lucide icon instances.
+   * Sets a consistent default size and prevents inline-baseline
+   * misalignment when icons appear inside flex or text containers.
+   * Individual instances can override width/height via Tailwind
+   * sizing utilities (e.g. w-4 h-4).
+   */
+  .my-icon {
+    display: inline-block;
+    width: 1.25rem;  /* w-5 — 20px */
+    height: 1.25rem; /* h-5 — 20px */
+    flex-shrink: 0;
+  }
+}

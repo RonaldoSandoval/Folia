@@ -1,0 +1,51 @@
+<div class="relative inline-block">
+
+  <!-- Trigger — any element passed with the [trigger] attribute -->
+  <div (click)="toggle()" class="inline-block">
+    <ng-content select="[trigger]" />
+  </div>
+
+  <!-- Floating panel -->
+  @if (isOpen()) {
+  <div
+    class="absolute top-full z-50 mt-2 min-w-52 rounded-xl border border-border bg-surface shadow-xl origin-top"
+    [class]="align() === 'right' ? 'right-0' : 'left-0'"
+    role="menu"
+    [attr.aria-expanded]="isOpen()"
+    [attr.aria-hidden]="!isOpen()"
+  >
+    <div class="p-1.5">
+      @for (item of items(); track item.id) {
+
+        <!-- Optional separator before the item -->
+        @if (item.separator) {
+          <div role="separator" class="my-1 -mx-1.5 border-t border-divider"></div>
+        }
+
+        <!-- Item row -->
+        <button
+          type="button"
+          role="menuitem"
+          [disabled]="item.disabled ?? false"
+          (click)="select(item)"
+          class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
+          [class]="itemClasses(item)"
+        >
+          @if (item.icon) {
+            <lucide-icon
+              [img]="item.icon"
+              class="my-icon w-4 h-4 shrink-0"
+              aria-hidden="true"
+            />
+          }
+          {{ item.label }}
+        </button>
+
+      } @empty {
+        <p class="px-3 py-2 text-sm text-muted">No options available.</p>
+      }
+    </div>
+  </div>
+  }
+
+</div>
