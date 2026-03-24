@@ -1,4 +1,4 @@
-# Typs-Clone — Claude Code Project Guide
+# Folia — Claude Code Project Guide
 
 ## What this project is
 A collaborative Typst document editor — a product-level clone of [typst.app](https://typst.app) built with Angular 21. Users write Typst markup, see a live canvas-rendered preview, organize documents, and eventually collaborate in real time. A key differentiator is an integrated AI assistant (Claude API) that takes user research and inserts it as formatted Typst content.

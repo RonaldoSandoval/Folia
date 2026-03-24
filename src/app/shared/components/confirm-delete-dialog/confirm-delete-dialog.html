@@ -16,6 +16,11 @@
           <span class="font-semibold text-foreground">"{{ documentTitle() }}"</span>
           de forma permanente. Esta acción no se puede deshacer.
         </p>
+        @if (warningText()) {
+          <p class="text-sm text-warning font-medium mt-1">
+            ⚠ {{ warningText() }}
+          </p>
+        }
       </div>
     </div>
 

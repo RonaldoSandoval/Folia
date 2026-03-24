@@ -1,1 +1,61 @@
-<div #canvasContainer class="block rounded-sm overflow-hidden shadow-lg"></div>
+<!-- ── Toolbar ─────────────────────────────────────────────────────────────── -->
+<div class="flex items-center justify-between h-9 px-3 border-b border-divider bg-surface shrink-0">
+
+  <!-- Zoom controls -->
+  <div class="flex items-center gap-0.5">
+    <button
+      type="button"
+      title="Reducir zoom (Ctrl+-)"
+      [disabled]="!canZoomOut()"
+      class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground
+             disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      (click)="zoomOut()"
+    >
+      <lucide-icon [img]="Minus" class="w-3.5 h-3.5" aria-hidden="true" />
+    </button>
+
+    <button
+      type="button"
+      title="Restablecer zoom (Ctrl+0)"
+      class="px-2 py-0.5 rounded text-xs font-mono text-secondary min-w-[3.5rem] text-center
+             hover:bg-surface-hover hover:text-foreground transition-colors"
+      (click)="resetZoom()"
+    >
+      {{ zoomLabel() }}
+    </button>
+
+    <button
+      type="button"
+      title="Aumentar zoom (Ctrl+=)"
+      [disabled]="!canZoomIn()"
+      class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground
+             disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      (click)="zoomIn()"
+    >
+      <lucide-icon [img]="Plus" class="w-3.5 h-3.5" aria-hidden="true" />
+    </button>
+  </div>
+
+  <!-- Fit to width -->
+  <button
+    type="button"
+    title="Ajustar al ancho"
+    class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground transition-colors"
+    (click)="fitWidth()"
+  >
+    <lucide-icon [img]="Maximize2" class="w-3.5 h-3.5" aria-hidden="true" />
+  </button>
+
+</div>
+
+<!-- ── Scroll area ────────────────────────────────────────────────────────── -->
+<div #scrollArea class="flex-1 overflow-auto bg-[#f5f5f0]"
+     (mouseenter)="isHovered.set(true)"
+     (mouseleave)="isHovered.set(false)">
+  <!-- min-w-max makes this wrapper grow to the document's true zoomed width,
+       so the scroll area provides bidirectional scrollbars instead of clipping.
+       justify-center centers the document when it's narrower than the viewport. -->
+  <div class="min-w-max min-h-full flex items-start justify-center p-8">
+    <div #container [style.zoom]="zoom()"></div>
+  </div>
+</div>

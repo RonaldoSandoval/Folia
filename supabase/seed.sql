@@ -1,5 +1,5 @@
 -- ============================================================
--- Typs-Clone — Seed de prueba
+-- Folia — Seed de prueba
 -- ============================================================
 -- Crea 2 usuarios, 2 documentos y 1 colaboración.
 --
@@ -121,10 +121,10 @@ on conflict (id) do nothing;
 --    en caso de que el trigger no haya disparado.
 -- ============================================================
 
-insert into profiles (id, full_name)
+insert into profiles (id, full_name, email)
 values
-  ('a0000000-0000-0000-0000-000000000001', 'Ana García'),
-  ('a0000000-0000-0000-0000-000000000002', 'Carlos López')
+  ('a0000000-0000-0000-0000-000000000001', 'Ana García',    'usuario1@typs.test'),
+  ('a0000000-0000-0000-0000-000000000002', 'Carlos López',  'usuario2@typs.test')
 on conflict (id) do nothing;
 
 

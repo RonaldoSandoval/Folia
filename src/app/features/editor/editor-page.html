@@ -1,4 +1,4 @@
-<div class="flex flex-col h-screen bg-background overflow-hidden">
+<div class="flex flex-col h-screen bg-background overflow-hidden relative">
 
   <!-- ══ Editor Header ════════════════════════════════════════════════════ -->
   <app-editor-header
@@ -6,13 +6,17 @@
     [documentTitle]="documentTitle()"
     [filesOpen]="filesOpen()"
     [chatOpen]="chatOpen()"
+    [sharingOpen]="sharingOpen()"
+    [isCollaborative]="isCollaborative()"
+    [presenceUsers]="presenceUsers()"
     [compiling]="compiling()"
     [saveStatus]="saveStatus()"
     (toggleFileClick)="toggleFile()"
     (toggleChatClick)="toggleChat()"
+    (toggleSharingClick)="toggleSharing()"
     (backClick)="goBack()"
     (saveClick)="saveDocument()"
-    (downloadClick)="download()"
+    (downloadFormat)="download($event)"
   />
 
   <!-- ══ Body ═════════════════════════════════════════════════════════════ -->
@@ -26,8 +30,12 @@
           [activeFile]="activeFile()"
           [imageFiles]="imageFiles()"
           (fileSelect)="onFileSelect($event)"
-          (fileCreate)="onFileCreate()"
+          (fileCreate)="onFileCreate($event)"
+          (fileRename)="onFileRename($event)"
           (fileDelete)="onFileDelete($event)"
+          (folderCreate)="onFolderCreate($event)"
+          (folderRename)="onFolderRename($event)"
+          (folderDelete)="onFolderDelete($event)"
           (imageUpload)="onImageUpload($event)"
           (imageRename)="onImageRename($event)"
           (imageDelete)="onImageDelete($event)"
@@ -43,14 +51,38 @@
         class="flex flex-col overflow-hidden"
         [style.width.%]="editorWidthPct()"
       >
-        <div class="flex items-center h-8 px-3 border-b border-divider bg-surface shrink-0">
+        <div class="flex items-center h-8 px-3 border-b border-divider bg-surface shrink-0 gap-3">
           <span class="text-xs font-medium text-muted uppercase tracking-wider select-none">
             Editor
           </span>
+          @if (userRole() !== 'viewer') {
+            <span
+              class="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border
+                     text-[10px] text-muted select-none cursor-default"
+              title="Ctrl+K — Generar contenido con IA en la posición del cursor"
+            >
+              <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" aria-hidden="true">
+                <path d="M12 3l1.88 5.76a2 2 0 001.27 1.27L21 12l-5.85 1.97a2 2 0 00-1.27 1.27L12 21l-1.88-5.76a2 2 0 00-1.27-1.27L3 12l5.85-1.97a2 2 0 001.27-1.27z"/>
+              </svg>
+              Ctrl+K
+            </span>
+          }
+          <span class="flex-1"></span>
+          @if (isCollaborative()) {
+            <span class="flex items-center gap-1 text-xs text-green-500">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+              En vivo
+            </span>
+          }
         </div>
         <div class="flex-1 overflow-hidden">
           <app-editor-panel
+            [yjsBinding]="yjsBinding()"
+            [readonly]="userRole() === 'viewer'"
             (contentChange)="onContentChange($event)"
+            (askAi)="onAskAi($event)"
+            (aiInlineCommand)="onAiInlineCommand($event)"
           />
         </div>
       </div>
@@ -71,12 +103,41 @@
           </span>
 
           @if (compileError()) {
-            <span
-              class="text-xs text-red-500 truncate max-w-xs"
-              [title]="compileError()!"
-            >
-              {{ compileError() }}
-            </span>
+            <div class="flex flex-col items-end min-w-0">
+              <button
+                type="button"
+                class="flex items-center gap-1 text-xs text-red-500 hover:text-red-400
+                       transition-colors focus-visible:outline-none focus-visible:ring-1
+                       focus-visible:ring-red-500 rounded"
+                [attr.aria-expanded]="errorExpanded()"
+                aria-controls="compile-error-detail"
+                (click)="toggleErrorPanel()"
+              >
+                <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span class="truncate max-w-[12rem]">Error de compilación</span>
+                <svg class="w-3 h-3 shrink-0 transition-transform duration-150"
+                     [class.rotate-180]="errorExpanded()"
+                     viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </button>
+
+              @if (errorExpanded()) {
+                <div
+                  id="compile-error-detail"
+                  role="alert"
+                  class="mt-1 px-2 py-1.5 rounded bg-red-500/10 border border-red-500/30
+                         text-[11px] text-red-400 font-mono whitespace-pre-wrap break-all
+                         max-w-xs max-h-32 overflow-y-auto"
+                >{{ compileError() }}</div>
+              }
+            </div>
           }
 
           @if (compiling()) {
@@ -94,7 +155,23 @@
 
     </div>
 
-    <!-- ③ Chat sidebar overlay (slides in from right) -->
+    <!-- ③ Sharing sidebar overlay (slides in from right) -->
+    <aside
+      class="absolute top-0 right-0 bottom-0 w-80 flex flex-col
+             bg-surface border-l border-border z-30
+             transition-transform duration-300 ease-in-out"
+      [class.translate-x-0]="sharingOpen()"
+      [class.translate-x-full]="!sharingOpen()"
+    >
+      <app-sharing-panel
+        [documentId]="documentId"
+        [collaborators]="collaborators()"
+        [isOwner]="userRole() === 'owner'"
+        (close)="toggleSharing()"
+      />
+    </aside>
+
+    <!-- ④ Chat sidebar overlay (slides in from right) -->
     <aside
       class="absolute top-0 right-0 bottom-0 w-80 flex flex-col
              bg-surface border-l border-border z-20
@@ -102,9 +179,18 @@
       [class.translate-x-0]="chatOpen()"
       [class.translate-x-full]="!chatOpen()"
     >
-      <app-chat-panel (insertContent)="appendToContent($event)" />
+      <app-chat-panel [documentId]="documentId" [contextProvider]="getEditorContext" (insertContent)="insertAtCursor($event)" />
     </aside>
 
   </div>
+
+  <!-- ⑤ Loading overlay — shown while initDocument() resolves -->
+  @if (isLoadingDocument()) {
+    <div class="absolute inset-0 z-50 flex flex-col items-center justify-center
+                bg-background/80 backdrop-blur-sm gap-3">
+      <app-spinner size="lg" />
+      <span class="text-sm text-muted">Cargando documento…</span>
+    </div>
+  }
 
 </div>

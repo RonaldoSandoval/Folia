@@ -1,6 +1,8 @@
 export const environment = {
-  production: false,
-  groqApiKey: 'REEMPLAZAR_CON_TU_GROQ_API_KEY',
-  supabaseUrl: 'https://fllfswyulinxcxqkfoph.supabase.co',
-  supabaseKey: 'sb_publishable_eudUL_YqiIfGbXT944Hsfg_3YTFysmX',
+  production:   false,
+  supabaseUrl:  '',
+  supabaseKey:  '',
+  // Dev-only: used directly when production=false (no Edge Function needed locally).
+  // In production this value is ignored — keys live in Supabase secrets.
+  groqApiKey:   '',
 };

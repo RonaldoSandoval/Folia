@@ -41,3 +41,18 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# Environment / secrets — commit .env.example, never .env
+.env
+.env.local
+.env.*.local
+
+# Environment files with hardcoded secrets
+src/environments/environment.ts
+src/environments/environment.*.local.ts
+
+# Supabase local temp files
+supabase/.temp/
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json

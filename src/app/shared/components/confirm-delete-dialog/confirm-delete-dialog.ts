@@ -18,8 +18,14 @@ import { Button } from '../button/button';
 export class ConfirmDeleteDialog {
   readonly Trash2 = Trash2;
 
-  /** Name of the document to delete — shown in the confirmation message. */
+  /** Name of the item to delete — shown in the confirmation message. */
   readonly documentTitle = input<string>('');
+
+  /**
+   * Optional warning shown below the main message.
+   * Use to communicate side-effects (e.g. "This will also delete N documents").
+   */
+  readonly warningText = input<string>('');
 
   /** Emitted when the user confirms the deletion. */
   readonly confirm = output<void>();

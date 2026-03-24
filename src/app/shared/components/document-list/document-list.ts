@@ -7,6 +7,7 @@ import {
   Pencil,
   Search,
   Trash2,
+  Users,
 } from 'lucide-angular';
 import { Dropdown, DropdownItem } from '../dropdown/dropdown';
 
@@ -19,6 +20,11 @@ export interface DocumentItem {
   id: string;
   title: string;
   updatedAt: Date;
+  folderId?: string | null;
+  /** False when the document was shared with the current user by someone else. */
+  isOwned?: boolean;
+  /** True when the document has at least one collaborator (owner perspective). */
+  hasCollaborators?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +75,19 @@ function relativeTime(date: Date): string {
   imports: [LucideAngularModule, Dropdown],
   templateUrl: './document-list.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [`
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .doc-card {
+      animation: card-in 220ms ease-out both;
+      animation-delay: calc(min(var(--i, 0), 8) * 50ms);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .doc-card { animation: none; }
+    }
+  `],
 })
 export class DocumentList {
   /** Filtered and sorted documents to render. */
@@ -93,9 +112,10 @@ export class DocumentList {
   // Icon refs
   // ---------------------------------------------------------------------------
 
-  readonly FileText      = FileText;
+  readonly FileText       = FileText;
   readonly MoreHorizontal = MoreHorizontal;
-  readonly Search        = Search;
+  readonly Search         = Search;
+  readonly Users          = Users;
 
   // ---------------------------------------------------------------------------
   // Per-card context menu

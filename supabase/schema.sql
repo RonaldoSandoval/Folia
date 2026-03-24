@@ -1,7 +1,7 @@
 -- ============================================================
--- Typs-Clone — Supabase Schema
+-- Folia — Supabase Schema (fuente de verdad única)
 -- ============================================================
--- Ejecutar en el SQL Editor de Supabase en este orden.
+-- Ejecutar en el SQL Editor de Supabase en orden.
 -- Requiere que el proyecto tenga habilitado Supabase Auth.
 -- ============================================================
 
@@ -32,6 +32,7 @@ create table profiles (
   username    text        unique,
   full_name   text,
   avatar_url  text,
+  email       text,
   created_at  timestamptz default now() not null,
   updated_at  timestamptz default now() not null
 );
@@ -57,6 +58,7 @@ create table folders (
 -- Documento Typst. El contenido es el markup crudo (.typ).
 -- `files` almacena todos los archivos del proyecto como JSONB.
 -- `active_file` indica cuál archivo está activo en el editor.
+-- `yjs_state` almacena el estado Yjs para colaboración en tiempo real.
 -- ------------------------------------------------------------
 create table documents (
   id            uuid        default uuid_generate_v4() primary key,
@@ -66,11 +68,13 @@ create table documents (
   content       text        not null default '',
   files         jsonb       not null default '[{"name":"main.typ","content":""}]'::jsonb,
   active_file   text        not null default 'main.typ',
+  yjs_state     jsonb,
   thumbnail_url text,
   is_public     boolean     not null default false,
   created_at    timestamptz default now() not null,
   updated_at    timestamptz default now() not null
 );
+
 
 -- ------------------------------------------------------------
 -- document_collaborators
@@ -100,10 +104,24 @@ create table document_versions (
   created_by     uuid        references profiles  (id) on delete set null not null,
   content        text        not null,
   version_number integer     not null,
-  label          text,       -- etiqueta opcional: "v1.0", "antes del refactor", etc.
+  label          text,
   created_at     timestamptz default now() not null,
 
   unique (document_id, version_number)
+);
+
+
+-- ------------------------------------------------------------
+-- ai_requests
+-- Registro de peticiones IA para rate-limiting server-side.
+-- Todas las escrituras van a través del Edge Function con
+-- service role key (bypassa RLS).
+-- ------------------------------------------------------------
+create table ai_requests (
+  id         uuid        default gen_random_uuid() primary key,
+  user_id    uuid        not null references auth.users (id) on delete cascade,
+  model_id   text        not null,
+  created_at timestamptz not null default now()
 );
 
 
@@ -119,6 +137,7 @@ create index on document_collaborators (document_id);
 create index on document_collaborators (user_id);
 create index on document_versions      (document_id);
 create index on document_versions      (document_id, version_number desc);
+create index on ai_requests            (user_id, created_at desc);
 
 
 -- ============================================================
@@ -153,6 +172,7 @@ create trigger documents_updated_at
 
 -- ------------------------------------------------------------
 -- Crea perfil automáticamente al registrar usuario
+-- Copia full_name, avatar_url y email desde auth.users.
 -- ------------------------------------------------------------
 create or replace function handle_new_user()
 returns trigger
@@ -160,12 +180,15 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into profiles (id, full_name, avatar_url)
+  insert into profiles (id, full_name, avatar_url, email)
   values (
     new.id,
     new.raw_user_meta_data ->> 'full_name',
-    new.raw_user_meta_data ->> 'avatar_url'
-  );
+    new.raw_user_meta_data ->> 'avatar_url',
+    new.email
+  )
+  on conflict (id) do update
+    set email = excluded.email;
   return new;
 end;
 $$;
@@ -249,6 +272,120 @@ as $$
 $$;
 
 
+-- ------------------------------------------------------------
+-- Búsqueda de usuarios por nombre o email
+-- Excluye al propio usuario. Máximo 10 resultados.
+-- ------------------------------------------------------------
+create or replace function search_profiles(query text)
+returns table (id uuid, full_name text, email text, avatar_url text)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select id, full_name, email, avatar_url
+  from profiles
+  where
+    (lower(full_name) like '%' || lower(query) || '%'
+    or lower(email)   like '%' || lower(query) || '%')
+    and id != auth.uid()
+  limit 10;
+$$;
+
+
+-- ------------------------------------------------------------
+-- Devuelve todos los colaboradores de un documento.
+-- Disponible para el dueño y para cualquier colaborador.
+-- Usa SECURITY DEFINER para evitar recursión en RLS.
+-- ------------------------------------------------------------
+create or replace function get_document_collaborators(doc_id uuid)
+returns table (
+  user_id    uuid,
+  role       collaborator_role,
+  full_name  text,
+  email      text,
+  avatar_url text
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select
+    dc.user_id,
+    dc.role,
+    p.full_name,
+    p.email,
+    p.avatar_url
+  from document_collaborators dc
+  join profiles p on p.id = dc.user_id
+  where dc.document_id = doc_id
+    and (
+      exists (
+        select 1 from documents d
+        where d.id = doc_id and d.owner_id = auth.uid()
+      )
+      or exists (
+        select 1 from document_collaborators dc2
+        where dc2.document_id = doc_id and dc2.user_id = auth.uid()
+      )
+    );
+$$;
+
+
+-- ------------------------------------------------------------
+-- Solo el dueño puede mover un documento entre carpetas
+-- (cambiar folder_id).
+-- ------------------------------------------------------------
+create or replace function prevent_non_owner_folder_move()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  if new.folder_id is distinct from old.folder_id
+    and auth.uid() is distinct from old.owner_id
+  then
+    raise exception
+      'Solo el dueño del documento puede moverlo entre carpetas'
+      using errcode = 'insufficient_privilege';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger enforce_owner_folder_move
+  before update on documents
+  for each row
+  execute function prevent_non_owner_folder_move();
+
+
+-- ------------------------------------------------------------
+-- Solo el dueño puede renombrar un documento (cambiar title).
+-- ------------------------------------------------------------
+create or replace function prevent_non_owner_title_change()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  if new.title is distinct from old.title
+    and auth.uid() is distinct from old.owner_id
+  then
+    raise exception
+      'Solo el dueño del documento puede cambiar su nombre'
+      using errcode = 'insufficient_privilege';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger enforce_owner_title_change
+  before update on documents
+  for each row
+  execute function prevent_non_owner_title_change();
+
+
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================
@@ -258,6 +395,7 @@ alter table folders                enable row level security;
 alter table documents              enable row level security;
 alter table document_collaborators enable row level security;
 alter table document_versions      enable row level security;
+alter table ai_requests            enable row level security;
 
 
 -- ------------------------------------------------------------
@@ -283,6 +421,22 @@ create policy "profiles: update propio"
 create policy "folders: acceso total al dueño"
   on folders for all
   using (auth.uid() = owner_id);
+
+-- Los colaboradores pueden ver carpetas que contienen
+-- documentos compartidos con ellos (para que el documento
+-- no desaparezca cuando el dueño lo mueve a una carpeta).
+create policy "folders: colaboradores ven carpetas de docs compartidos"
+  on folders for select
+  using (
+    auth.uid() = owner_id
+    or exists (
+      select 1
+      from   public.documents             d
+      join   public.document_collaborators dc on dc.document_id = d.id
+      where  d.folder_id = folders.id
+        and  dc.user_id  = auth.uid()
+    )
+  );
 
 
 -- ------------------------------------------------------------
@@ -359,3 +513,17 @@ create policy "versions: inserción por editores y dueño"
         )
     )
   );
+
+
+-- ------------------------------------------------------------
+-- ai_requests: sin acceso directo (solo service role)
+-- ------------------------------------------------------------
+-- (no se crean políticas — RLS habilitado bloquea todo acceso
+-- directo; las escrituras van por Edge Function con service key)
+
+
+-- ============================================================
+-- REALTIME
+-- ============================================================
+
+alter publication supabase_realtime add table document_collaborators;

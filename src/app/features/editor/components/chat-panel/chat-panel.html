@@ -3,17 +3,29 @@
   <lucide-icon [img]="Sparkles" class="my-icon w-4 h-4 text-brand" aria-hidden="true" />
   <span class="text-sm font-semibold text-foreground">Asistente IA</span>
 
-  @if (isLoading()) {
+  @if (isStreaming()) {
     <span class="ml-auto flex items-center gap-1 shrink-0" aria-label="Respondiendo">
       <span class="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"></span>
       <span class="w-1.5 h-1.5 rounded-full bg-brand animate-pulse [animation-delay:150ms]"></span>
       <span class="w-1.5 h-1.5 rounded-full bg-brand animate-pulse [animation-delay:300ms]"></span>
     </span>
   }
+
+  @if (messages().length > 1 && !isStreaming()) {
+    <button
+      type="button"
+      class="ml-auto p-1.5 rounded text-muted hover:text-foreground hover:bg-surface-hover
+             transition-colors"
+      title="Limpiar conversación"
+      (click)="clearChat()"
+    >
+      <lucide-icon [img]="Trash2" class="w-3.5 h-3.5" aria-hidden="true" />
+    </button>
+  }
 </div>
 
 <!-- Message list -->
-<div class="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
+<div #messageList class="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col scroll-smooth">
   @for (msg of messages(); track $index) {
 
     @if (msg.role === 'assistant') {
@@ -22,14 +34,48 @@
           <lucide-icon [img]="Sparkles" class="w-3 h-3 text-brand" aria-hidden="true" />
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm text-foreground bg-surface rounded-xl rounded-tl-none px-3 py-2 leading-relaxed shadow-sm whitespace-pre-wrap">
-            {{ msg.text }}
+
+          <!-- During streaming show raw text; after streaming show parsed displayText -->
+          <p class="text-sm text-foreground bg-surface rounded-xl rounded-tl-none px-3 py-2
+                    leading-relaxed shadow-sm whitespace-pre-wrap break-words">
+            {{ (isStreaming() && $last) ? msg.text : (msg.displayText ?? msg.text) }}
           </p>
-          @if ($last && msg.text && !isLoading()) {
+
+          @if ($last && isStreaming()) {
+            <span class="inline-block w-0.5 h-3.5 bg-brand align-middle ml-px animate-pulse"
+                  aria-hidden="true"></span>
+          }
+
+          <!-- Typst code preview block — only shown after streaming ends -->
+          @if (!isStreaming() && msg.typstCode) {
+            <div class="mt-2 rounded-lg border border-border overflow-hidden shadow-sm">
+              <div class="flex items-center justify-between px-3 py-1.5
+                          bg-surface border-b border-border">
+                <span class="text-[10px] font-semibold text-muted uppercase tracking-wide">Typst</span>
+                <button
+                  type="button"
+                  class="flex items-center gap-1 text-[10px] font-medium text-brand
+                         hover:text-brand/80 transition-colors px-1.5 py-0.5
+                         rounded hover:bg-brand/10"
+                  (click)="insertResponse(msg)"
+                  title="Insertar en el editor"
+                >
+                  <lucide-icon [img]="ClipboardPaste" class="w-3 h-3" aria-hidden="true" />
+                  Insertar
+                </button>
+              </div>
+              <pre class="text-[11px] text-foreground bg-background px-3 py-2
+                          overflow-x-auto whitespace-pre leading-relaxed font-mono">{{ msg.typstCode }}</pre>
+            </div>
+          }
+
+          <!-- Insert prose response when there's no Typst block -->
+          @if (!isStreaming() && !msg.typstCode && msg.displayText && msg.role === 'assistant' && msg.displayText !== '¡Hola! Soy tu asistente de Typst. ¿En qué puedo ayudarte hoy?') {
             <button
               type="button"
-              class="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted hover:text-brand transition-colors"
-              (click)="insertLastResponse()"
+              class="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted
+                     hover:text-brand transition-colors"
+              (click)="insertResponse(msg)"
               title="Insertar en el editor"
             >
               <lucide-icon [img]="ClipboardPaste" class="w-3 h-3" aria-hidden="true" />
@@ -41,38 +87,106 @@
 
     } @else {
       <div class="flex justify-end">
-        <p class="text-sm text-white bg-brand rounded-xl rounded-tr-none px-3 py-2 leading-relaxed max-w-[85%]">
-          {{ msg.text }}
-        </p>
+        <div class="flex flex-col items-end gap-1 max-w-[85%]">
+          @if (msg.quotedText) {
+            <div class="w-full text-[11px] text-white/70 bg-brand/60 rounded-lg px-2.5 py-1.5
+                        border-l-2 border-white/50 font-mono line-clamp-3 break-all">
+              {{ msg.quotedText }}
+            </div>
+          }
+          <p class="text-sm text-white bg-brand rounded-xl rounded-tr-none px-3 py-2
+                    leading-relaxed break-words w-full">
+            {{ msg.text }}
+          </p>
+        </div>
       </div>
     }
 
   }
 </div>
 
+<!-- Rate-limit banner -->
+@if (rateLimitUntil() !== null) {
+  <div class="shrink-0 mx-3 mb-0 mt-2 flex items-center gap-2 px-3 py-2 rounded-lg
+              bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400">
+    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <span class="text-xs">
+      Límite alcanzado. Disponible en <strong>{{ rateLimitSecs() }}s</strong>
+    </span>
+  </div>
+}
+
 <!-- Input area -->
 <div class="shrink-0 p-3 border-t border-border bg-surface">
-  <div class="flex items-end gap-2 rounded-xl border border-border bg-background p-2
-              focus-within:ring-2 focus-within:ring-brand/30 focus-within:border-brand/50">
+
+  @if (quotedContext()) {
+    <div class="flex items-start gap-1.5 mb-2 px-2 py-1.5 rounded-lg
+                bg-brand/8 border border-brand/20">
+      <div class="flex-1 min-w-0 text-[11px] text-muted font-mono
+                  line-clamp-2 break-all leading-relaxed">
+        {{ quotedContext() }}
+      </div>
+      <button
+        type="button"
+        class="shrink-0 p-0.5 text-muted hover:text-foreground transition-colors"
+        (click)="clearQuotedContext()"
+        aria-label="Quitar fragmento"
+      >
+        <lucide-icon [img]="X" class="w-3 h-3" aria-hidden="true" />
+      </button>
+    </div>
+  }
+
+  <!-- Quick action chips — hidden during streaming or when a quoted context is active -->
+  @if (!isStreaming() && !quotedContext() && messages().length <= 1) {
+    <div class="flex flex-wrap gap-1.5 mb-2">
+      @for (action of quickActions; track action.label) {
+        <button
+          type="button"
+          class="flex items-center gap-1 px-2 py-1 rounded-full border border-border
+                 text-[11px] text-muted hover:border-brand/50 hover:text-brand
+                 hover:bg-brand/5 transition-colors select-none"
+          (click)="applyQuickAction(action.prompt)"
+        >
+          <lucide-icon [img]="Zap" class="w-2.5 h-2.5" aria-hidden="true" />
+          {{ action.label }}
+        </button>
+      }
+    </div>
+  }
+
+  <div
+    class="flex items-end gap-2 rounded-xl border bg-background p-2
+           focus-within:ring-2 transition-colors"
+    [class]="rateLimitUntil() !== null
+      ? 'border-amber-500/40 focus-within:ring-amber-500/20'
+      : 'border-border focus-within:ring-brand/30 focus-within:border-brand/50'"
+  >
     <textarea
-      rows="2"
+      #draftTextarea
       placeholder="Describe qué quieres escribir…"
       class="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted
-             outline-none leading-relaxed"
+             outline-none leading-relaxed disabled:opacity-50
+             min-h-[2.5rem] max-h-[8.25rem] overflow-y-auto"
       [value]="draft()"
+      [disabled]="rateLimitUntil() !== null"
       (input)="updateDraft($event)"
       (keydown)="onKeydown($event)"
     ></textarea>
     <app-button
       size="sm"
       [icon]="ArrowUp"
-      [disabled]="draft().trim().length === 0 || isLoading()"
-      [loading]="isLoading()"
+      [disabled]="draft().trim().length === 0 || isStreaming() || rateLimitUntil() !== null"
+      [loading]="isStreaming()"
       (click)="send()"
       aria-label="Enviar mensaje"
     ></app-button>
   </div>
   <p class="text-[10px] text-muted mt-1.5 text-center">
-    Shift + Enter para nueva línea
+    Shift + Enter para nueva línea · {{ aiService.requestsRemaining }} peticiones restantes
   </p>
 </div>

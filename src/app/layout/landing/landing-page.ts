@@ -6,7 +6,7 @@ import { Button } from '../../shared/components/button/button';
 /**
  * Public landing page.
  *
- * Shows the Typs brand hero and a primary CTA that takes the user to the
+ * Shows the Folia brand hero and a primary CTA that takes the user to the
  * main application. In the future the CTA will redirect to the login page.
  */
 @Component({

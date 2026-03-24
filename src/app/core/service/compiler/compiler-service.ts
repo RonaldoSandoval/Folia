@@ -1,5 +1,5 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { CompileResponse } from '../../../workers/compiler.worker';
+import { CompileResponse, SourceFile } from '../../../workers/compiler.worker';
 
 interface PendingRequest {
   resolve: (value: Uint8Array) => void;
@@ -29,8 +29,10 @@ export class CompilerService implements OnDestroy {
       const pending = this.pending.get(data.id);
       if (!pending) return;
       this.pending.delete(data.id);
-      if (data.type === 'error') {
+      if (data.type === 'error' || data.type === 'pdf-error') {
         pending.reject(new Error(data.message));
+      } else if (data.type === 'pdf-success') {
+        pending.resolve(data.data);
       } else {
         pending.resolve(data.vectorData);
       }
@@ -43,14 +45,17 @@ export class CompilerService implements OnDestroy {
 
   /**
    * Compiles the given Typst source.
+   *
+   * `sources` — all project files so the worker can resolve #include / #import.
    * Cancels any in-flight requests — only the latest result matters.
+   * Debouncing is the responsibility of the call site (e.g. EditorPage).
    */
-  compile(content: string): Promise<Uint8Array> {
+  compile(content: string, sources: SourceFile[] = []): Promise<Uint8Array> {
     this.rejectAll(new Error('Cancelled by a newer compile request'));
     const id = String(this.requestCounter++);
     return new Promise<Uint8Array>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ type: 'compile', id, content });
+      this.worker.postMessage({ type: 'compile', id, content, sources });
     });
   }
 
@@ -60,13 +65,23 @@ export class CompilerService implements OnDestroy {
    * After calling this, Typst markup can reference the file by name:
    *   `#image("photo.png")`
    *
-   * The buffer is transferred (zero-copy). Do not reuse `data` after this call.
-   *
    * @param path - Virtual path as seen by Typst, e.g. `"/photo.png"`.
-   * @param data - Raw file bytes.
+   * @param data - Raw file bytes. The caller's buffer is NOT detached — a copy
+   *               is made before transferring to the worker so `data` remains
+   *               usable (e.g. for subsequent rename/re-add operations).
    */
   addFile(path: string, data: Uint8Array): void {
-    this.worker.postMessage({ type: 'add-file', path, data }, [data.buffer]);
+    const copy = data.slice();
+    this.worker.postMessage({ type: 'add-file', path, data: copy }, [copy.buffer]);
+  }
+
+  /** Exports the last compiled document as PDF bytes. */
+  exportPdf(): Promise<Uint8Array> {
+    const id = String(this.requestCounter++);
+    return new Promise<Uint8Array>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage({ type: 'export-pdf', id });
+    });
   }
 
   removeFile(path: string): void {

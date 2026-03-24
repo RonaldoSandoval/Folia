@@ -21,7 +21,7 @@ function getInitPromise(): Promise<void> {
   // receive a Promise, keeping the message-handler logic uniform.
   try {
     $typst.setCompilerInitOptions({
-      getModule: () => '/assets/typst_ts_web_compiler_bg.wasm',
+      getModule: () => getWasmModule(),
       // Load bundled text fonts from our local /assets/fonts/ directory
       // instead of the jsDelivr CDN.  Run `npm run fonts:download` once to
       // populate that directory.
@@ -45,38 +45,108 @@ function getInitPromise(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// WASM module loader
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches and compiles the Typst WASM compiler module.
+ *
+ * Caching is handled by the Service Worker (public/sw.js), which intercepts
+ * this fetch and serves the file from its persistent Cache Storage with the
+ * correct Content-Type: application/wasm header. This removes the need for
+ * a duplicate Cache API inside the worker.
+ *
+ * The ArrayBuffer fallback handles two edge cases:
+ *  1. First page load before the SW has installed and activated.
+ *  2. Non-HTTPS contexts (localhost without SW support) where the server may
+ *     send application/octet-stream, causing compileStreaming() to reject.
+ */
+async function getWasmModule(): Promise<WebAssembly.Module> {
+  const url = '/assets/typst_ts_web_compiler_bg.wasm';
+  try {
+    // Fast path: SW serves the file from cache with the correct MIME type.
+    return await WebAssembly.compileStreaming(fetch(url));
+  } catch {
+    // Fallback: compile from an ArrayBuffer (always works regardless of MIME type).
+    const buf = await fetch(url).then((r) => r.arrayBuffer());
+    return WebAssembly.compile(buf);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Result cache
 // ---------------------------------------------------------------------------
 
-/** The Typst source that produced the last successful compilation. */
-let lastContent = '';
+/**
+ * Fingerprint of the last successful compilation input.
+ * Covers both `content` (main file) and all `sources` so that edits to any
+ * project file correctly invalidate the cache even when main.typ is unchanged.
+ */
+let lastFingerprint = '';
 
 /** The vector output of the last successful compilation (null if none yet). */
 let lastVectorData: Uint8Array | null = null;
+
+/** Builds a cheap string fingerprint covering all compilation inputs. */
+function buildFingerprint(content: string, sources: SourceFile[]): string {
+  return content + '\0' + sources.map((s) => `${s.name}\0${s.content}`).join('\0');
+}
 
 // ---------------------------------------------------------------------------
 // Message types  (must stay in sync with CompilerService)
 // ---------------------------------------------------------------------------
 
-export type CompileRequest  = { type: 'compile';     id: string; content: string };
-export type AddFileRequest  = { type: 'add-file';    path: string; data: Uint8Array };
+export type SourceFile        = { name: string; content: string };
+export type CompileRequest    = { type: 'compile';     id: string; content: string; sources: SourceFile[] };
+export type ExportPdfRequest  = { type: 'export-pdf';  id: string };
+export type AddFileRequest    = { type: 'add-file';    path: string; data: Uint8Array };
 export type RemoveFileRequest = { type: 'remove-file'; path: string };
-export type WorkerRequest   = CompileRequest | AddFileRequest | RemoveFileRequest;
+export type WorkerRequest     = CompileRequest | ExportPdfRequest | AddFileRequest | RemoveFileRequest;
 
 export type CompileResponse =
-  | { id: string; type: 'success'; vectorData: Uint8Array }
-  | { id: string; type: 'error'; message: string };
+  | { id: string; type: 'success';     vectorData: Uint8Array }
+  | { id: string; type: 'error';       message: string }
+  | { id: string; type: 'pdf-success'; data: Uint8Array }
+  | { id: string; type: 'pdf-error';   message: string };
 
 // ---------------------------------------------------------------------------
 // Message handler
 // ---------------------------------------------------------------------------
+
+// Pre-warm: start loading WASM + fonts immediately when the worker spawns,
+// so the first compile message finds the compiler already ready.
+getInitPromise().catch(() => { /* surfaces as an error on the first compile */ });
 
 addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
   // ── add-file: register a binary asset (image, etc.) ──────────────────────
   if (data.type === 'add-file') {
     await getInitPromise();
     await $typst.mapShadow(data.path, data.data);
-    lastContent = '';
+    lastFingerprint = '';
+    return;
+  }
+
+  // ── export-pdf: re-compile to PDF and return bytes ───────────────────────
+  if (data.type === 'export-pdf') {
+    try {
+      await getInitPromise();
+      if (!lastVectorData) {
+        throw new Error('No compiled document available for PDF export');
+      }
+      const pdfBytes = await $typst.pdf({ mainFilePath: '/main.typ', root: '/' });
+      if (!pdfBytes) throw new Error('PDF export returned no data');
+      const toSend = new Uint8Array(pdfBytes);
+      postMessage(
+        { id: data.id, type: 'pdf-success', data: toSend } satisfies CompileResponse,
+        [toSend.buffer],
+      );
+    } catch (err) {
+      postMessage({
+        id: data.id,
+        type: 'pdf-error',
+        message: err instanceof Error ? err.message : String(err),
+      } satisfies CompileResponse);
+    }
     return;
   }
 
@@ -84,31 +154,35 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
   if (data.type === 'remove-file') {
     await getInitPromise();
     await $typst.unmapShadow(data.path);
-    lastContent = '';
+    lastFingerprint = '';
     return;
   }
 
   // ── compile ───────────────────────────────────────────────────────────────
-  const { id, content } = data;
+  const { id, content, sources } = data;
 
   try {
     await getInitPromise();
 
-    // Return the cached result when the source has not changed.
-    if (content === lastContent && lastVectorData) {
+    // Return the cached result when nothing has changed (content + all sources).
+    const fingerprint = buildFingerprint(content, sources);
+    if (fingerprint === lastFingerprint && lastVectorData) {
       postMessage(
         { id, type: 'success', vectorData: lastVectorData } satisfies CompileResponse,
       );
       return;
     }
 
-    lastContent = content;
+    lastFingerprint = fingerprint;
     lastVectorData = null;
 
-    // Register the source at a fixed path so the project root stays at '/'.
-    // Using { mainContent } would place the source at '/tmp/{random}.typ',
-    // making project root '/tmp/' and blocking access to images at '/photo.jpg'.
-    // With addSource('/main.typ') + mainFilePath + root:'/', images are accessible.
+    // Register every project file so #include / #import work across files.
+    // Sources other than main.typ are registered at their own paths (e.g. /bib.typ).
+    // main.typ is always overridden with `content` (the current editor state,
+    // which may differ from the saved version).
+    for (const src of sources) {
+      await $typst.addSource(`/${src.name}`, src.content);
+    }
     await $typst.addSource('/main.typ', content);
     const vectorData = await $typst.vector({ mainFilePath: '/main.typ', root: '/' });
 
@@ -118,7 +192,12 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
 
     lastVectorData = vectorData;
 
-    postMessage({ id, type: 'success', vectorData } satisfies CompileResponse);
+    // Clone so we can transfer the buffer (transfer detaches it — lastVectorData stays intact).
+    const toSend = new Uint8Array(vectorData);
+    postMessage(
+      { id, type: 'success', vectorData: toSend } satisfies CompileResponse,
+      [toSend.buffer],
+    );
   } catch (err) {
     postMessage({
       id,

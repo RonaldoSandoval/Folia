@@ -1,8 +1,8 @@
 <!-- Document grid -->
 @if (documents().length > 0) {
   <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-    @for (doc of documents(); track doc.id) {
-      <li>
+    @for (doc of documents(); track doc.id; let i = $index) {
+      <li class="doc-card" [style.--i]="i">
         <article
           class="group relative flex flex-col gap-4 p-5 rounded-xl border border-border bg-surface hover:border-brand/30 hover:shadow-md cursor-pointer transition-all duration-200"
           (click)="documentOpen.emit(doc)"
@@ -13,9 +13,19 @@
           <!-- Top row: file icon + context menu -->
           <div class="flex items-start justify-between gap-2">
 
-            <!-- File icon badge -->
-            <div class="w-10 h-10 rounded-lg bg-brand-subtle flex items-center justify-center shrink-0">
-              <lucide-icon [img]="FileText" class="my-icon w-5 h-5 text-brand-icon" aria-hidden="true" />
+            <!-- File icon badge — green tint when shared -->
+            <div
+              class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+              [class]="(doc.hasCollaborators || doc.isOwned === false)
+                ? 'bg-green-500/10'
+                : 'bg-brand-subtle'"
+            >
+              <lucide-icon
+                [img]="(doc.hasCollaborators || doc.isOwned === false) ? Users : FileText"
+                class="my-icon w-5 h-5"
+                [class]="(doc.hasCollaborators || doc.isOwned === false) ? 'text-green-500' : 'text-brand-icon'"
+                aria-hidden="true"
+              />
             </div>
 
             <!-- Context menu — stopPropagation prevents opening the document -->
@@ -42,9 +52,20 @@
             <p class="text-sm font-semibold text-foreground truncate leading-snug">
               {{ doc.title }}
             </p>
-            <p class="text-xs text-muted">
-              {{ relativeTime(doc.updatedAt) }}
-            </p>
+            <div class="flex items-center gap-2">
+              <p class="text-xs text-muted">{{ relativeTime(doc.updatedAt) }}</p>
+              @if (doc.isOwned === false) {
+                <span class="text-xs text-green-600 dark:text-green-400 bg-green-500/10
+                             px-1.5 py-0.5 rounded-full leading-none shrink-0">
+                  Compartido contigo
+                </span>
+              } @else if (doc.hasCollaborators) {
+                <span class="text-xs text-green-600 dark:text-green-400 bg-green-500/10
+                             px-1.5 py-0.5 rounded-full leading-none shrink-0">
+                  Colaborativo
+                </span>
+              }
+            </div>
           </div>
 
         </article>

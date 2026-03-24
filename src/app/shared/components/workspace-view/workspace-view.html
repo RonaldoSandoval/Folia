@@ -1,0 +1,208 @@
+@if (hasContent) {
+  <div class="space-y-8">
+
+    <!-- ── Root drop zone (only while dragging a doc that is inside a folder) ── -->
+    @if (draggingDoc() && draggingDoc()!.folderId) {
+      <div
+        class="flex items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-3
+               text-sm font-medium transition-all duration-150 select-none"
+        [class.border-brand]="dragOverRoot()"
+        [class.bg-brand-subtle]="dragOverRoot()"
+        [class.text-brand-icon]="dragOverRoot()"
+        [class.border-border]="!dragOverRoot()"
+        [class.text-muted]="!dragOverRoot()"
+        (dragover)="onRootDragOver($event)"
+        (dragleave)="onRootDragLeave($event)"
+        (drop)="onRootDrop($event)"
+      >
+        <lucide-icon [img]="Home" class="w-4 h-4" aria-hidden="true" />
+        Soltar aquí para quitar de la carpeta
+      </div>
+    }
+
+    <!-- ── Folder grid ─────────────────────────────────────────────── -->
+    @if (folders().length > 0) {
+      <section>
+        <h2 class="text-xs font-semibold uppercase tracking-widest text-muted mb-3 select-none">
+          Carpetas
+        </h2>
+        <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          @for (folder of folders(); track folder.id) {
+            <li>
+              <article
+                class="group relative flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-surface
+                       hover:border-brand/30 hover:shadow-md cursor-pointer transition-all duration-200"
+                [class.border-brand]="dragOverFolderId() === folder.id"
+                [class.bg-brand-subtle]="dragOverFolderId() === folder.id"
+                [class.shadow-lg]="dragOverFolderId() === folder.id"
+                (click)="folderOpen.emit(folder)"
+                (dragover)="onFolderDragOver($event, folder)"
+                (dragleave)="onFolderDragLeave($event)"
+                (drop)="onFolderDrop($event, folder)"
+                [attr.aria-label]="'Abrir carpeta ' + folder.name"
+                role="button"
+                tabindex="0"
+              >
+                <!-- Folder icon -->
+                <div class="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-800 flex items-center justify-center shrink-0">
+                  <lucide-icon
+                    [img]="dragOverFolderId() === folder.id ? FolderOpen : Folder"
+                    class="w-5 h-5 text-green-700 dark:text-green-200"
+                    aria-hidden="true"
+                  />
+                </div>
+                <!-- Name -->
+                <span class="flex-1 text-sm font-medium text-foreground truncate">
+                  {{ folder.name }}
+                </span>
+
+                <!-- Drop hint label -->
+                @if (draggingDoc() && dragOverFolderId() === folder.id) {
+                  <span class="text-xs text-brand-icon font-medium shrink-0">Mover aquí</span>
+                }
+
+                <!-- Context menu (only for owned folders, hidden while dragging) -->
+                @if (!draggingDoc() && folder.isOwned) {
+                  <div (click)="$event.stopPropagation()" class="shrink-0">
+                    <app-dropdown
+                      [items]="getFolderMenuItems(folder)"
+                      (itemClick)="onFolderMenuAction(folder, $event)"
+                      align="right"
+                    >
+                      <button
+                        trigger
+                        type="button"
+                        [attr.aria-label]="'Opciones para ' + folder.name"
+                        class="p-1.5 rounded-lg text-icon opacity-0 group-hover:opacity-100 focus:opacity-100
+                               hover:bg-surface-hover hover:text-foreground focus:outline-none
+                               focus:ring-2 focus:ring-brand/40 transition-all duration-150"
+                      >
+                        <lucide-icon [img]="MoreHorizontal" class="my-icon w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </app-dropdown>
+                  </div>
+                }
+              </article>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    <!-- ── Document grid ───────────────────────────────────────────── -->
+    @if (documents().length > 0) {
+      <section>
+        @if (folders().length > 0) {
+          <h2 class="text-xs font-semibold uppercase tracking-widest text-muted mb-3 select-none">
+            Documentos
+          </h2>
+        }
+        <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          @for (doc of documents(); track doc.id) {
+            <li>
+              <article
+                [attr.draggable]="doc.isOwned !== false"
+                class="group relative flex flex-col gap-4 p-5 rounded-xl border border-border bg-surface
+                       hover:border-brand/30 hover:shadow-md transition-all duration-200"
+                [class.cursor-grab]="doc.isOwned !== false"
+                [class.active:cursor-grabbing]="doc.isOwned !== false"
+                [class.opacity-40]="draggingDoc()?.id === doc.id"
+                [class.ring-2]="draggingDoc()?.id === doc.id"
+                [class.ring-brand]="draggingDoc()?.id === doc.id"
+                (click)="docOpen.emit(doc)"
+                (dragstart)="onDragStart($event, doc)"
+                (dragend)="onDragEnd()"
+                [attr.aria-label]="'Abrir ' + doc.title"
+                role="button"
+                tabindex="0"
+              >
+                <!-- Top row: icon + menu -->
+                <div class="flex items-start justify-between gap-2">
+                  <div
+                    class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                    [class]="(doc.hasCollaborators || doc.isOwned === false)
+                      ? 'bg-green-500/10'
+                      : 'bg-brand-subtle'"
+                  >
+                    <lucide-icon
+                      [img]="(doc.hasCollaborators || doc.isOwned === false) ? Users : FileText"
+                      class="my-icon w-5 h-5"
+                      [class]="(doc.hasCollaborators || doc.isOwned === false) ? 'text-green-500' : 'text-brand-icon'"
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <div (click)="$event.stopPropagation()" class="shrink-0">
+                    <app-dropdown
+                      [items]="getDocMenuItems(doc)"
+                      (itemClick)="onDocMenuAction(doc, $event)"
+                      align="right"
+                    >
+                      <button
+                        trigger
+                        type="button"
+                        [attr.aria-label]="'Opciones para ' + doc.title"
+                        class="p-1.5 rounded-lg text-icon opacity-0 group-hover:opacity-100 focus:opacity-100
+                               hover:bg-surface-hover hover:text-foreground focus:outline-none
+                               focus:ring-2 focus:ring-brand/40 transition-all duration-150"
+                      >
+                        <lucide-icon [img]="MoreHorizontal" class="my-icon w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </app-dropdown>
+                  </div>
+                </div>
+
+                <!-- Info -->
+                <div class="flex flex-col gap-0.5">
+                  <p class="text-sm font-semibold text-foreground truncate leading-snug">
+                    {{ doc.title }}
+                  </p>
+                  <div class="flex items-center gap-2">
+                    <p class="text-xs text-muted">{{ relativeTime(doc.updatedAt) }}</p>
+                    @if (doc.isOwned === false) {
+                      <span class="text-xs text-green-600 dark:text-green-400 bg-green-500/10
+                                   px-1.5 py-0.5 rounded-full leading-none shrink-0">
+                        Compartido contigo
+                      </span>
+                    } @else if (doc.hasCollaborators) {
+                      <span class="text-xs text-green-600 dark:text-green-400 bg-green-500/10
+                                   px-1.5 py-0.5 rounded-full leading-none shrink-0">
+                        Colaborativo
+                      </span>
+                    }
+                  </div>
+                </div>
+              </article>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+  </div>
+}
+
+<!-- ── Empty state ──────────────────────────────────────────────────── -->
+@if (!hasContent) {
+  <div class="flex flex-col items-center justify-center py-20 gap-5 text-center">
+
+    <div class="w-16 h-16 rounded-2xl bg-surface-hover flex items-center justify-center">
+      @if (searchActive()) {
+        <lucide-icon [img]="Search" class="my-icon w-7 h-7 text-icon" aria-hidden="true" />
+      } @else {
+        <lucide-icon [img]="FileText" class="my-icon w-7 h-7 text-icon" aria-hidden="true" />
+      }
+    </div>
+
+    <div class="flex flex-col gap-1">
+      @if (searchActive()) {
+        <p class="text-sm font-semibold text-foreground">No se encontraron documentos</p>
+        <p class="text-sm text-muted">Intenta con un término de búsqueda diferente</p>
+      } @else {
+        <p class="text-sm font-semibold text-foreground">Esta carpeta está vacía</p>
+        <p class="text-sm text-muted">Crea un documento o mueve uno aquí</p>
+      }
+    </div>
+
+  </div>
+}

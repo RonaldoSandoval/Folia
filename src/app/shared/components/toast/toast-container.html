@@ -1,0 +1,33 @@
+<!-- Fixed bottom-right toast stack — rendered on top of everything -->
+<div
+  class="fixed bottom-4 right-4 z-[300] flex flex-col gap-2 items-end pointer-events-none"
+  aria-live="polite"
+  aria-label="Notificaciones"
+>
+  @for (toast of toastService.toasts(); track toast.id) {
+    <div
+      class="pointer-events-auto animate-in slide-in-from-right-4 fade-in duration-200"
+      [class]="toastClasses(toast.type)"
+      role="alert"
+    >
+      <!-- Icon -->
+      <span class="shrink-0 font-bold text-base leading-none mt-px">{{ icon(toast.type) }}</span>
+
+      <!-- Message -->
+      <span class="flex-1 leading-snug">{{ toast.message }}</span>
+
+      <!-- Dismiss button -->
+      <button
+        type="button"
+        class="shrink-0 opacity-50 hover:opacity-100 transition-opacity -mr-1 -mt-1 p-1 rounded"
+        (click)="toastService.dismiss(toast.id)"
+        aria-label="Cerrar"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+  }
+</div>

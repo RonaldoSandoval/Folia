@@ -50,14 +50,18 @@
   <!-- Right slot -->
   <div headerActions class="flex items-center gap-2 h-8">
 
-    <!-- Download -->
-    <app-button
-      variant="ghost"
-      size="sm"
-      class="h-8 flex items-center justify-center"
-      [icon]="Download"
-      (click)="downloadClick.emit()"
-    ></app-button>
+    <!-- Download dropdown -->
+    <app-dropdown [items]="downloadItems" (itemClick)="onDownloadItem($event)" align="right">
+      <button
+        trigger
+        type="button"
+        title="Descargar documento"
+        class="flex items-center justify-center h-8 w-8 rounded-lg transition-colors
+               text-icon hover:bg-surface-hover hover:text-foreground"
+      >
+        <lucide-icon [img]="Download" class="w-4 h-4" aria-hidden="true" />
+      </button>
+    </app-dropdown>
 
     <!-- Save status label -->
     @if (saveStatus() !== 'guardado') {
@@ -75,7 +79,51 @@
       (click)="saveClick.emit()"
     ></app-button>
 
+    <!-- Presence avatars (shown only in collaborative mode) -->
+    @if (presenceUsers().length > 0) {
+      <div class="flex items-center shrink-0" title="{{ presenceUsers().length }} persona(s) en el documento">
+        <div class="flex -space-x-2">
+          @for (user of presenceUsers().slice(0, 4); track user.id) {
+            <div
+              class="w-6 h-6 rounded-full border-2 border-background flex items-center justify-center
+                     text-[10px] font-bold text-white shrink-0"
+              [style.background-color]="user.color"
+              [title]="user.displayName ?? ''"
+            >
+              {{ (user.displayName ?? '?').charAt(0).toUpperCase() }}
+            </div>
+          }
+          @if (presenceUsers().length > 4) {
+            <div
+              class="w-6 h-6 rounded-full border-2 border-background bg-surface-hover flex items-center
+                     justify-center text-[10px] font-semibold text-muted shrink-0"
+            >
+              +{{ presenceUsers().length - 4 }}
+            </div>
+          }
+        </div>
+      </div>
+    }
+
     <div class="w-px h-5 bg-border shrink-0"></div>
+
+    <!-- Sharing toggle -->
+    <button
+      type="button"
+      (click)="toggleSharingClick.emit()"
+      [attr.aria-pressed]="sharingOpen()"
+      aria-label="Compartir documento"
+      title="Compartir"
+      class="relative flex items-center justify-center h-8 w-8 rounded-lg transition-colors"
+      [class]="sharingOpen()
+        ? 'bg-brand-subtle text-brand-text'
+        : 'text-icon hover:bg-surface-hover hover:text-foreground'"
+    >
+      <lucide-icon [img]="Users" class="w-4 h-4" aria-hidden="true" />
+      @if (isCollaborative()) {
+        <span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-green-500"></span>
+      }
+    </button>
 
     <!-- Chat toggle -->
     <button
