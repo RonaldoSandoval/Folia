@@ -8,6 +8,7 @@ import { provideDocumentService } from './core/service/document/document.service
 import { provideAuthService } from './core/service/auth/auth.service';
 import { provideCollaborationService } from './core/service/collaboration/collaboration.service';
 import { provideAssetService } from './core/service/asset/asset.service';
+import { provideTypstUniverseService } from './core/service/typst-universe/typst-universe.service';
 import { environment } from '../environments/environment';
 
 /**
@@ -54,5 +55,6 @@ export const appConfig: ApplicationConfig = {
     // ───────────────────────────────────────────────────────────────────────
     provideCollaborationService(),
     provideAssetService(),
+    provideTypstUniverseService(),
   ],
 };

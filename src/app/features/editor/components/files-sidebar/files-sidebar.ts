@@ -15,12 +15,15 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  FileCode,
+  FileJson,
   FilePlus,
   FileText,
   Folder,
   FolderOpen,
   FolderPlus,
   ImagePlus,
+  type LucideIconData,
   LucideAngularModule,
   Pencil,
   Trash2,
@@ -65,6 +68,8 @@ const ACCEPTED_IMAGE_TYPES = [
 export class FilesSidebar implements AfterViewChecked {
   // ── Icon refs ──────────────────────────────────────────────────────────────
   protected readonly FileText     = FileText;
+  protected readonly FileCode     = FileCode;
+  protected readonly FileJson     = FileJson;
   protected readonly FilePlus     = FilePlus;
   protected readonly FolderPlus   = FolderPlus;
   protected readonly Folder       = Folder;
@@ -129,6 +134,17 @@ export class FilesSidebar implements AfterViewChecked {
     return idx === -1 ? name : name.slice(idx + 1);
   }
 
+  /** Returns the appropriate icon for a file based on its extension. */
+  protected fileIcon(name: string): LucideIconData {
+    switch (this.basename(name).slice(this.basename(name).lastIndexOf('.')).toLowerCase()) {
+      case '.json':                          return FileJson;
+      case '.bib': case '.csl':
+      case '.toml': case '.yaml': case '.yml':
+      case '.md':  case '.txt':              return FileCode;
+      default:                               return FileText;
+    }
+  }
+
   /** Returns images that belong to the given folder. */
   protected imagesInFolder(folderName: string): ImageFile[] {
     return this.imageFiles().filter((img) => img.name.startsWith(`${folderName}/`));
@@ -177,7 +193,7 @@ export class FilesSidebar implements AfterViewChecked {
   confirmCreate(): void {
     const raw = this.newFileName().trim();
     if (!raw) { this.isCreating.set(false); return; }
-    const name = raw.endsWith('.typ') ? raw : `${raw}.typ`;
+    const name = raw.includes('.') ? raw : `${raw}.typ`;
     this.fileCreate.emit(name);
     this.isCreating.set(false);
     this.newFileName.set('');
@@ -210,7 +226,7 @@ export class FilesSidebar implements AfterViewChecked {
     if (!folder) return;
     const raw = this.newFileInFolder().trim();
     if (!raw) { this.creatingInFolder.set(null); return; }
-    const fileName = raw.endsWith('.typ') ? raw : `${raw}.typ`;
+    const fileName = raw.includes('.') ? raw : `${raw}.typ`;
     this.fileCreate.emit(`${folder}/${fileName}`);
     this.creatingInFolder.set(null);
     this.newFileInFolder.set('');
@@ -245,9 +261,9 @@ export class FilesSidebar implements AfterViewChecked {
     if (!oldName) return;
     const newBasename = this.renameFileValue().trim();
     if (!newBasename) { this.renamingFile.set(null); return; }
-    const ext      = newBasename.endsWith('.typ') ? '' : '.typ';
+    const withExt  = newBasename.includes('.') ? newBasename : `${newBasename}.typ`;
     const folder   = oldName.includes('/') ? oldName.slice(0, oldName.lastIndexOf('/') + 1) : '';
-    const newName  = `${folder}${newBasename}${ext}`;
+    const newName  = `${folder}${withExt}`;
     if (newName !== oldName) this.fileRename.emit({ oldName, newName });
     this.renamingFile.set(null);
   }
