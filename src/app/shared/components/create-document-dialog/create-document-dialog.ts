@@ -13,7 +13,7 @@ import {
 import { Button } from '../button/button';
 import { Modal } from '../modal/modal';
 import { DOCUMENT_TEMPLATES, type DocumentTemplate } from '../../../core/templates/document-templates';
-import type { ProjectFile } from '../../../core/service/document/document.service';
+import type { ProjectAsset, ProjectFile } from '../../../core/service/document/document.service';
 import {
   TypstUniverseService,
   type UniverseTemplate,
@@ -22,6 +22,7 @@ import {
 export interface CreateDocumentEvent {
   title: string;
   files: ProjectFile[];
+  assets: ProjectAsset[];
 }
 
 @Component({
@@ -91,7 +92,8 @@ export class CreateDocumentDialog implements AfterViewInit {
   private readonly inputRef = viewChild<ElementRef<HTMLInputElement>>('titleInput');
 
   /** Files to load into the new document; set by nextStep() before moving to step 2. */
-  private pendingFiles: ProjectFile[] = [{ name: 'main.typ', content: '' }];
+  private pendingFiles:  ProjectFile[]  = [{ name: 'main.typ', content: '' }];
+  private pendingAssets: ProjectAsset[] = [];
 
   ngAfterViewInit(): void {
     if (!this.showTemplates()) {
@@ -143,7 +145,9 @@ export class CreateDocumentDialog implements AfterViewInit {
 
       this.downloadingTemplate.set(true);
       try {
-        this.pendingFiles = await this.universeService.downloadTemplate(t);
+        const result = await this.universeService.downloadTemplate(t);
+        this.pendingFiles  = result.files;
+        this.pendingAssets = result.assets;
       } catch {
         this.downloadError.set(true);
         this.downloadingTemplate.set(false);
@@ -151,7 +155,8 @@ export class CreateDocumentDialog implements AfterViewInit {
       }
       this.downloadingTemplate.set(false);
     } else {
-      this.pendingFiles = this.selectedTemplate().files;
+      this.pendingFiles  = this.selectedTemplate().files;
+      this.pendingAssets = [];
     }
 
     this.step.set('name');
@@ -165,7 +170,7 @@ export class CreateDocumentDialog implements AfterViewInit {
   protected submit(): void {
     const trimmed = this.title().trim();
     if (!trimmed) return;
-    this.confirm.emit({ title: trimmed, files: this.pendingFiles });
+    this.confirm.emit({ title: trimmed, files: this.pendingFiles, assets: this.pendingAssets });
   }
 
   protected onKeydown(event: KeyboardEvent): void {

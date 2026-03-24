@@ -21,8 +21,7 @@ import { SUPABASE } from '../supabase/supabase.client';
 export class AssetService {
   private readonly supabase = inject(SUPABASE);
 
-  private static readonly IMAGES_BUCKET = 'project-assets';       // IMAGE PERSISTENCE — PENDIENTE
-  // private static readonly THUMBS_BUCKET = 'document-thumbnails'; // IMAGE PERSISTENCE — PENDIENTE (thumbnails usan base64 en DB por ahora)
+  private static readonly IMAGES_BUCKET = 'project-assets';
 
   // ── Images ─────────────────────────────────────────────────────────────────
 

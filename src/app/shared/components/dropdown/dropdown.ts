@@ -3,12 +3,25 @@ import {
   Component,
   ElementRef,
   HostListener,
+  computed,
   inject,
   input,
   output,
   signal,
 } from '@angular/core';
 import { LucideAngularModule, LucideIconData } from 'lucide-angular';
+
+// ---------------------------------------------------------------------------
+// Shared open-state tracker
+// ---------------------------------------------------------------------------
+
+/**
+ * Module-level signal that holds the ID of the currently open dropdown.
+ * All Dropdown instances share this signal, so opening one automatically
+ * closes every other open dropdown.
+ */
+const activeDropdownId = signal<string | null>(null);
+let dropdownCounter    = 0;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -79,19 +92,22 @@ export class Dropdown {
   /** Emits the selected item when the user clicks a non-disabled row. */
   itemClick = output<DropdownItem>();
 
-  /** Whether the panel is currently visible. */
-  protected readonly isOpen = signal(false);
+  /** Unique ID for this instance — used to identify the active dropdown. */
+  private readonly id = String(dropdownCounter++);
 
-  /** Toggles the panel open/closed. Called by the trigger wrapper. */
+  /** True only when this instance is the currently active dropdown. */
+  protected readonly isOpen = computed(() => activeDropdownId() === this.id);
+
+  /** Toggles the panel open/closed. Opening this dropdown closes all others. */
   protected toggle(): void {
-    this.isOpen.update((v) => !v);
+    activeDropdownId.set(this.isOpen() ? null : this.id);
   }
 
   /** Handles item selection; ignored for disabled items. */
   protected select(item: DropdownItem): void {
     if (item.disabled) return;
     this.itemClick.emit(item);
-    this.isOpen.set(false);
+    activeDropdownId.set(null);
   }
 
   /** Returns the Tailwind classes for a single item row. */
@@ -109,17 +125,17 @@ export class Dropdown {
   // Global event listeners
   // ---------------------------------------------------------------------------
 
-  /** Closes the panel when the user clicks anywhere outside the host element. */
+  /** Closes this dropdown when the user clicks anywhere outside the host element. */
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
-    if (!this.host.nativeElement.contains(event.target)) {
-      this.isOpen.set(false);
+    if (this.isOpen() && !this.host.nativeElement.contains(event.target)) {
+      activeDropdownId.set(null);
     }
   }
 
-  /** Closes the panel when the user presses Escape. */
+  /** Closes this dropdown when the user presses Escape. */
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    this.isOpen.set(false);
+    if (this.isOpen()) activeDropdownId.set(null);
   }
 }

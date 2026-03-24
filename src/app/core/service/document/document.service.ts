@@ -1,5 +1,4 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { SUPABASE } from '../supabase/supabase.client';
 import { ToastService } from '../toast/toast.service';
@@ -15,6 +14,12 @@ export interface ProjectFile {
   content: string;
   /** When true this entry is a project-level folder, not a .typ source file. */
   isFolder?: true;
+}
+
+/** A binary asset (image, font, etc.) that belongs to a project. */
+export interface ProjectAsset {
+  name: string;
+  data: Uint8Array;
 }
 
 export interface FolderItem {
@@ -110,7 +115,6 @@ function mapFolderRow(row: FolderRow, currentUserId?: string): FolderItem {
 export class DocumentService {
   private readonly supabase   = inject(SUPABASE);
   readonly         auth       = inject(AuthService);
-  private readonly router     = inject(Router);
   private readonly toast      = inject(ToastService);
 
   /** Documents are fetched in pages of this size. */
@@ -215,9 +219,9 @@ export class DocumentService {
     title = 'Sin título',
     folderId: string | null = null,
     initialFiles?: ProjectFile[],
-  ): Promise<void> {
+  ): Promise<string | null> {
     const user = this.auth.user();
-    if (!user) return;
+    if (!user) return null;
 
     const files       = initialFiles?.length ? initialFiles : [{ name: 'main.typ', content: DEFAULT_CONTENT }];
     const activeFile  = files[0].name;
@@ -238,12 +242,12 @@ export class DocumentService {
 
     if (error || !data) {
       this.toast.error('No se pudo crear el documento. Intenta de nuevo.');
-      return;
+      return null;
     }
 
     const doc = mapRow(data as DocumentRow);
     this._documents.update((docs) => [doc, ...docs]);
-    await this.router.navigate(['/project', doc.id]);
+    return doc.id;
   }
 
   /**

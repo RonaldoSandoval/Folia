@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { extractTarGz } from './tar-extract';
-import type { ProjectFile } from '../document/document.service';
+import type { ProjectFile, ProjectAsset } from '../document/document.service';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -30,8 +30,19 @@ const INDEX_URL = 'https://packages.typst.org/preview/index.json';
 const PKG_BASE  = 'https://packages.typst.org/preview';
 const RAW_BASE  = 'https://raw.githubusercontent.com/typst/packages/main/packages/preview';
 
-/** Extensions treated as text and loaded as ProjectFiles. */
-const TEXT_EXTS = new Set(['.typ', '.bib', '.csl', '.txt', '.toml', '.yaml', '.yml', '.json']);
+/** Extensions treated as text and stored as ProjectFiles in the DB. */
+const TEXT_EXTS = new Set(['.typ', '.bib', '.csl', '.txt', '.toml', '.yaml', '.yml', '.json', '.svg']);
+
+/** Extensions treated as binary assets uploaded to Storage. */
+const BINARY_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ttf', '.otf', '.woff', '.woff2', '.pdf']);
+
+/** Result returned by {@link TypstUniverseService.downloadTemplate}. */
+export interface TemplateDownloadResult {
+  /** Text source files to persist in the `files` JSON column. */
+  files: ProjectFile[];
+  /** Binary assets to upload to Supabase Storage. */
+  assets: ProjectAsset[];
+}
 
 // ---------------------------------------------------------------------------
 // Service
@@ -40,7 +51,7 @@ const TEXT_EXTS = new Set(['.typ', '.bib', '.csl', '.txt', '.toml', '.yaml', '.y
 @Injectable()
 export class TypstUniverseService {
   private indexCache: UniverseTemplate[] | null = null;
-  private fileCache  = new Map<string, ProjectFile[]>();
+  private fileCache  = new Map<string, TemplateDownloadResult>();
 
   /**
    * Fetches the Typst Universe package index and returns only the packages that
@@ -69,13 +80,20 @@ export class TypstUniverseService {
 
   /**
    * Downloads the package `.tar.gz` from packages.typst.org and extracts all
-   * text files that live inside the template's declared directory.
-   * Results are cached per package version for the service lifetime.
+   * files that live inside the template's declared directory.
    *
+   * - Text files (`.typ`, `.bib`, `.svg`, etc.) are returned as `ProjectFile[]`
+   *   and persisted in the DB `files` column.
+   * - Binary files (`.png`, `.ttf`, etc.) are returned as `ProjectAsset[]` and
+   *   uploaded to Supabase Storage so they survive across sessions.
+   * - `isFolder: true` entries are automatically inferred from nested paths so
+   *   the files sidebar renders the correct tree structure.
+   *
+   * Results are cached per package version for the service lifetime.
    * Some archives include a top-level `{name}-{version}/` directory component;
    * this is stripped automatically via `stripLeadingDir()`.
    */
-  async downloadTemplate(t: UniverseTemplate): Promise<ProjectFile[]> {
+  async downloadTemplate(t: UniverseTemplate): Promise<TemplateDownloadResult> {
     const key = `${t.name}@${t.version}`;
     if (this.fileCache.has(key)) return this.fileCache.get(key)!;
 
@@ -85,28 +103,40 @@ export class TypstUniverseService {
 
     const dec         = new TextDecoder();
     const templateDir = t.template.path ? `${t.template.path}/` : '';
-    const result: ProjectFile[] = [];
+    const files:  ProjectFile[]  = [];
+    const assets: ProjectAsset[] = [];
 
     for (const [rawPath, data] of allFiles) {
       const stripped = stripLeadingDir(rawPath);
-
-      const ext = stripped.slice(stripped.lastIndexOf('.')).toLowerCase();
-      if (!TEXT_EXTS.has(ext)) continue;
-
       if (!stripped.startsWith(templateDir)) continue;
       const relative = stripped.slice(templateDir.length);
       if (!relative) continue;
 
-      result.push({ name: relative, content: dec.decode(data) });
+      const ext = relative.slice(relative.lastIndexOf('.')).toLowerCase();
+
+      if (TEXT_EXTS.has(ext)) {
+        files.push({ name: relative, content: dec.decode(data) });
+      } else if (BINARY_EXTS.has(ext)) {
+        assets.push({ name: relative, data: new Uint8Array(data) });
+      }
+    }
+
+    // Infer folder entries from nested paths (both text and binary files).
+    const allNames = [...files.map((f) => f.name), ...assets.map((a) => a.name)];
+    for (const folderPath of inferFolders(allNames)) {
+      files.push({ name: folderPath, content: '', isFolder: true });
     }
 
     // Ensure the declared entry-point file (usually main.typ) comes first.
-    result.sort((a, b) => {
+    files.sort((a, b) => {
+      if (a.isFolder && !b.isFolder) return 1;
+      if (!a.isFolder && b.isFolder) return -1;
       if (a.name === t.template.entrypoint) return -1;
       if (b.name === t.template.entrypoint) return 1;
       return a.name.localeCompare(b.name);
     });
 
+    const result: TemplateDownloadResult = { files, assets };
     this.fileCache.set(key, result);
     return result;
   }
@@ -120,6 +150,21 @@ export class TypstUniverseService {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Returns every unique parent path for a list of file names.
+ * e.g. ["assets/images/logo.png"] → ["assets", "assets/images"]
+ */
+function inferFolders(names: string[]): string[] {
+  const folders = new Set<string>();
+  for (const name of names) {
+    const parts = name.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      folders.add(parts.slice(0, i).join('/'));
+    }
+  }
+  return [...folders].sort();
+}
 
 /**
  * Strips an optional top-level directory component from a tar path.

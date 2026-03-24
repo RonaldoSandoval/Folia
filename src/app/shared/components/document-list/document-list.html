@@ -4,7 +4,7 @@
     @for (doc of documents(); track doc.id; let i = $index) {
       <li class="doc-card" [style.--i]="i">
         <article
-          class="group relative flex flex-col gap-4 p-5 rounded-xl border border-border bg-surface hover:border-brand/30 hover:shadow-md cursor-pointer transition-all duration-200 overflow-hidden"
+          class="group relative flex flex-col gap-4 p-5 rounded-xl border border-border bg-surface hover:border-brand/30 hover:shadow-md cursor-pointer transition-all duration-200"
           (click)="documentOpen.emit(doc)"
           [attr.aria-label]="'Open ' + doc.title"
           role="button"
@@ -12,7 +12,7 @@
         >
           <!-- Thumbnail preview (first page, generated on save) -->
           @if (doc.thumbnailUrl) {
-            <div class="-mx-5 -mt-5 mb-0 h-32 overflow-hidden border-b border-border">
+            <div class="-mx-5 -mt-5 mb-0 h-32 overflow-hidden rounded-tl-xl rounded-tr-xl border-b border-border">
               <img
                 [src]="doc.thumbnailUrl"
                 [alt]=""

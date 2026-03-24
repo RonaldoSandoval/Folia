@@ -12,6 +12,7 @@ import {
 } from 'lucide-angular';
 import type { FolderItem } from '../../../core/service/document/document.service';
 import { DocumentService } from '../../../core/service/document/document.service';
+import { AssetService } from '../../../core/service/asset/asset.service';
 import { Button } from '../../../shared/components/button/button';
 import { ConfirmDeleteDialog } from '../../../shared/components/confirm-delete-dialog/confirm-delete-dialog';
 import { CreateDocumentDialog, type CreateDocumentEvent } from '../../../shared/components/create-document-dialog/create-document-dialog';
@@ -50,6 +51,7 @@ export class AppShell {
 
   private readonly router              = inject(Router);
   protected readonly documentService   = inject(DocumentService);
+  private readonly assetService        = inject(AssetService);
 
   // ── Folder navigation ─────────────────────────────────────────────────────
 
@@ -98,8 +100,19 @@ export class AppShell {
   async confirmCreate(event: CreateDocumentEvent): Promise<void> {
     this.showCreateDialog.set(false);
     this.isProcessing.set(true);
-    await this.documentService.create(event.title, this.currentFolderId(), event.files);
+
+    const docId = await this.documentService.create(event.title, this.currentFolderId(), event.files);
+
+    if (docId && event.assets.length) {
+      // Upload binary assets before navigating so loadProjectImages() in the
+      // editor finds them immediately on first open.
+      await Promise.all(
+        event.assets.map((a) => this.assetService.uploadImage(docId, a.name, a.data)),
+      );
+    }
+
     this.isProcessing.set(false);
+    if (docId) await this.router.navigate(['/project', docId]);
   }
 
   openDocument(doc: DocumentItem): void {
@@ -135,7 +148,7 @@ export class AppShell {
 
   confirmCreateFolder(event: CreateDocumentEvent): void {
     this.showCreateFolderDialog.set(false);
-    this.documentService.createFolder(event.title, this.currentFolderId());
+    void this.documentService.createFolder(event.title, this.currentFolderId());
   }
 
   openFolder(folder: FolderItem): void { this.currentFolderId.set(folder.id); }

@@ -13,7 +13,16 @@ import {
 } from '@angular/core';
 import { createTypstRenderer } from '@myriaddreamin/typst.ts';
 import { withGlobalRenderer } from '@myriaddreamin/typst.ts/contrib/global-renderer';
-import { LucideAngularModule, Maximize2, Minus, Plus } from 'lucide-angular';
+import {
+  ChevronLeft,
+  ChevronRight,
+  LucideAngularModule,
+  Maximize2,
+  Minus,
+  Play,
+  Plus,
+  X,
+} from 'lucide-angular';
 
 const ZOOM_STEPS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
 const ZOOM_MIN   = ZOOM_STEPS[0];
@@ -54,9 +63,13 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
   /** Compiled Typst vector data from CompilerService. `null` = not yet compiled. */
   readonly vectorData = input<Uint8Array | null>(null);
 
-  protected readonly Minus     = Minus;
-  protected readonly Plus      = Plus;
-  protected readonly Maximize2 = Maximize2;
+  protected readonly Minus        = Minus;
+  protected readonly Plus         = Plus;
+  protected readonly Maximize2    = Maximize2;
+  protected readonly Play         = Play;
+  protected readonly ChevronLeft  = ChevronLeft;
+  protected readonly ChevronRight = ChevronRight;
+  protected readonly X            = X;
 
   // ── Zoom state ─────────────────────────────────────────────────────────────
 
@@ -66,6 +79,23 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
   protected readonly zoomLabel = computed(() => `${Math.round(this.zoom() * 100)}%`);
   protected readonly canZoomIn  = computed(() => this.zoom() < ZOOM_MAX);
   protected readonly canZoomOut = computed(() => this.zoom() > ZOOM_MIN);
+
+  // ── Presentation state ─────────────────────────────────────────────────────
+
+  protected readonly presentationActive = signal(false);
+  protected readonly currentSlide       = signal(0);
+  protected readonly slideCount         = signal(0);
+
+  /**
+   * PNG data URLs captured from each rendered `.typst-page` canvas.
+   * `canvas.toDataURL()` reads the already-painted pixels directly — no WASM
+   * re-render needed, and it works without any DOM-injection timing issues.
+   */
+  private slideDataUrls: string[] = [];
+
+  protected readonly currentSlideUrl = computed(
+    () => this.slideDataUrls[this.currentSlide()] ?? '',
+  );
 
   // ── View refs ──────────────────────────────────────────────────────────────
 
@@ -104,6 +134,7 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.scrollArea()?.nativeElement.removeEventListener('wheel', this.handleWheel);
+    if (this.presentationActive()) document.body.style.overflow = '';
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -185,13 +216,73 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
     this.zoom.set(parseFloat(fit.toFixed(2)));
   }
 
+  // ── Presentation ───────────────────────────────────────────────────────────
+
+  protected enterPresentation(): void {
+    const pages = Array.from(
+      this.container().nativeElement.querySelectorAll('.typst-page'),
+    ) as HTMLElement[];
+    if (!pages.length) return;
+
+    // Capture each page by reading the pixels the WASM renderer already painted
+    // onto its canvas. toDataURL() works on same-origin canvases without re-rendering.
+    const urls = pages
+      .map((page) => {
+        const canvas = page.querySelector('canvas') as HTMLCanvasElement | null;
+        return canvas?.width ? canvas.toDataURL('image/png') : '';
+      })
+      .filter(Boolean);
+
+    if (!urls.length) return;
+
+    this.slideDataUrls = urls;
+    this.slideCount.set(urls.length);
+    this.currentSlide.set(0);
+    this.presentationActive.set(true);
+    document.body.style.overflow = 'hidden';
+  }
+
+  protected exitPresentation(): void {
+    this.presentationActive.set(false);
+    document.body.style.overflow = '';
+    this.slideDataUrls = [];
+  }
+
+  protected prevSlide(): void {
+    if (this.currentSlide() > 0) this.currentSlide.update((s) => s - 1);
+  }
+
+  protected nextSlide(): void {
+    if (this.currentSlide() < this.slideCount() - 1) this.currentSlide.update((s) => s + 1);
+  }
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
   @HostListener('window:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent): void {
-    // Only handle zoom shortcuts when the cursor is over the preview panel,
-    // matching the same scope as the Ctrl+wheel handler. This prevents
-    // stealing Ctrl+= / Ctrl+- from the editor or the browser.
+    // Presentation mode shortcuts take priority.
+    if (this.presentationActive()) {
+      switch (event.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+        case ' ':
+          event.preventDefault();
+          this.nextSlide();
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          event.preventDefault();
+          this.prevSlide();
+          break;
+        case 'Escape':
+          event.preventDefault();
+          this.exitPresentation();
+          break;
+      }
+      return;
+    }
+
+    // Zoom shortcuts — only when cursor is over the preview panel.
     if (!this.isHovered()) return;
     if (!event.ctrlKey && !event.metaKey) return;
     switch (event.key) {

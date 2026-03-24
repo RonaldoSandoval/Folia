@@ -222,13 +222,7 @@ export class EditorPage implements OnInit, OnDestroy {
     // Hide the loading overlay only after all async setup (including initYjs) is done.
     this.isLoadingDocument.set(false);
 
-    // IMAGE PERSISTENCE — PENDIENTE (plan gratuito de Supabase)
-    // La lógica de persistencia de imágenes requiere el bucket "project-assets"
-    // en Supabase Storage, que no está disponible en el plan gratuito actual.
-    // Para activarla: crear el bucket, ejecutar las políticas RLS del archivo
-    // supabase/migrations/add_thumbnails_and_storage.sql y descomentar la línea.
-    //
-    // this.loadProjectImages().catch(() => {});
+    this.loadProjectImages().catch(() => {});
 
     // Schedule a thumbnail update on every editor open so existing documents
     // that predate this feature get their preview generated automatically.
@@ -732,7 +726,7 @@ export class EditorPage implements OnInit, OnDestroy {
     ]);
     this.compiler.addFile(`/${file.name}`, file.data);
     this.triggerCompile(this.content());
-    // void this.assetService.uploadImage(this.documentId, file.name, file.data); // IMAGE PERSISTENCE — PENDIENTE
+    void this.assetService.uploadImage(this.documentId, file.name, file.data);
   }
 
   onImageRename(event: { oldName: string; newName: string }): void {
@@ -745,7 +739,7 @@ export class EditorPage implements OnInit, OnDestroy {
       imgs.map((i) => (i.name === oldName ? { ...i, name: newName } : i)),
     );
     this.triggerCompile(this.content());
-    // void this.assetService.renameImage(this.documentId, oldName, newName); // IMAGE PERSISTENCE — PENDIENTE
+    void this.assetService.renameImage(this.documentId, oldName, newName);
   }
 
   onImageDelete(name: string): void {
@@ -755,45 +749,27 @@ export class EditorPage implements OnInit, OnDestroy {
     this.compiler.removeFile(`/${name}`);
     this.imageFiles.update((imgs) => imgs.filter((i) => i.name !== name));
     this.triggerCompile(this.content());
-    // void this.assetService.deleteImage(this.documentId, name); // IMAGE PERSISTENCE — PENDIENTE
+    void this.assetService.deleteImage(this.documentId, name);
   }
 
   // ── Image persistence ──────────────────────────────────────────────────────
-  //
-  // PENDIENTE — Requiere Supabase Storage (bucket "project-assets", privado).
-  //
-  // Por qué no se completó:
-  //   El plan gratuito de Supabase no permite crear nuevos buckets de Storage.
-  //   Sin el bucket, las llamadas a uploadImage / loadImages / deleteImage /
-  //   renameImage fallan con "Bucket not found" (HTTP 400).
-  //
-  // Qué hace esta lógica cuando esté activa:
-  //   Al abrir el editor, descarga todas las imágenes del proyecto desde
-  //   Storage y las registra en el sistema de archivos virtual del compilador
-  //   Typst, restaurando el estado exacto de la sesión anterior.
-  //
-  // Para activarla cuando el plan lo permita:
-  //   1. Crear el bucket "project-assets" (privado, RLS habilitado).
-  //   2. Ejecutar las políticas RLS de supabase/migrations/add_thumbnails_and_storage.sql.
-  //   3. Descomentar las cuatro líneas marcadas "IMAGE PERSISTENCE — PENDIENTE"
-  //      en onImageUpload, onImageRename, onImageDelete e initDocument.
 
-  // private async loadProjectImages(): Promise<void> {
-  //   const images = await this.assetService.loadImages(this.documentId);
-  //   if (!images.length) return;
-  //
-  //   for (const img of images) {
-  //     const previewUrl = URL.createObjectURL(new Blob([img.data.buffer as ArrayBuffer]));
-  //     const existing   = this.imageFiles().find((i) => i.name === img.name);
-  //     if (existing) URL.revokeObjectURL(existing.previewUrl);
-  //     this.imageFiles.update((imgs) => [
-  //       ...imgs.filter((i) => i.name !== img.name),
-  //       { name: img.name, previewUrl, data: img.data },
-  //     ]);
-  //     this.compiler.addFile(`/${img.name}`, img.data);
-  //   }
-  //   this.triggerCompile(this.content());
-  // }
+  private async loadProjectImages(): Promise<void> {
+    const images = await this.assetService.loadImages(this.documentId);
+    if (!images.length) return;
+
+    for (const img of images) {
+      const previewUrl = URL.createObjectURL(new Blob([img.data.buffer as ArrayBuffer]));
+      const existing   = this.imageFiles().find((i) => i.name === img.name);
+      if (existing) URL.revokeObjectURL(existing.previewUrl);
+      this.imageFiles.update((imgs) => [
+        ...imgs.filter((i) => i.name !== img.name),
+        { name: img.name, previewUrl, data: img.data },
+      ]);
+      this.compiler.addFile(`/${img.name}`, img.data);
+    }
+    this.triggerCompile(this.content());
+  }
 
   // ── Thumbnail ───────────────────────────────────────────────────────────────
 

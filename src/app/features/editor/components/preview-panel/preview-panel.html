@@ -36,15 +36,32 @@
     </button>
   </div>
 
-  <!-- Fit to width -->
-  <button
-    type="button"
-    title="Ajustar al ancho"
-    class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground transition-colors"
-    (click)="fitWidth()"
-  >
-    <lucide-icon [img]="Maximize2" class="w-3.5 h-3.5" aria-hidden="true" />
-  </button>
+  <!-- Right-side actions -->
+  <div class="flex items-center gap-0.5">
+
+    <!-- Fit to width -->
+    <button
+      type="button"
+      title="Ajustar al ancho"
+      class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground transition-colors"
+      (click)="fitWidth()"
+    >
+      <lucide-icon [img]="Maximize2" class="w-3.5 h-3.5" aria-hidden="true" />
+    </button>
+
+    <!-- Present -->
+    <button
+      type="button"
+      title="Presentar (pantalla completa)"
+      [disabled]="!vectorData()"
+      class="p-1 rounded text-icon hover:bg-surface-hover hover:text-foreground
+             disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      (click)="enterPresentation()"
+    >
+      <lucide-icon [img]="Play" class="w-3.5 h-3.5" aria-hidden="true" />
+    </button>
+
+  </div>
 
 </div>
 
@@ -52,10 +69,84 @@
 <div #scrollArea class="flex-1 overflow-auto bg-[#f5f5f0]"
      (mouseenter)="isHovered.set(true)"
      (mouseleave)="isHovered.set(false)">
-  <!-- min-w-max makes this wrapper grow to the document's true zoomed width,
-       so the scroll area provides bidirectional scrollbars instead of clipping.
-       justify-center centers the document when it's narrower than the viewport. -->
   <div class="min-w-max min-h-full flex items-start justify-center p-8">
     <div #container [style.zoom]="zoom()"></div>
   </div>
 </div>
+
+<!-- ── Presentation overlay ───────────────────────────────────────────────── -->
+@if (presentationActive()) {
+  <div class="fixed inset-0 z-[100] bg-black flex items-center justify-center select-none">
+
+    <!-- Current slide rendered as PNG from the existing canvas pixels -->
+    <img
+      [src]="currentSlideUrl()"
+      [alt]="'Diapositiva ' + (currentSlide() + 1)"
+      class="max-w-[calc(100vw-4rem)] max-h-[calc(100vh-4rem)] object-contain"
+      draggable="false"
+    />
+
+    <!-- Left click zone (prev) -->
+    <button
+      type="button"
+      aria-label="Diapositiva anterior"
+      class="absolute left-0 inset-y-0 w-1/4 cursor-w-resize focus:outline-none"
+      [disabled]="currentSlide() === 0"
+      (click)="prevSlide()"
+    ></button>
+
+    <!-- Right click zone (next) -->
+    <button
+      type="button"
+      aria-label="Siguiente diapositiva"
+      class="absolute right-0 inset-y-0 w-1/4 cursor-e-resize focus:outline-none"
+      [disabled]="currentSlide() === slideCount() - 1"
+      (click)="nextSlide()"
+    ></button>
+
+    <!-- Navigation arrows (only when multiple slides) -->
+    @if (slideCount() > 1) {
+      <button
+        type="button"
+        title="Anterior (←)"
+        [disabled]="currentSlide() === 0"
+        class="absolute left-4 top-1/2 -translate-y-1/2 z-10
+               p-2 rounded-full bg-white/10 hover:bg-white/20 text-white
+               disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+        (click)="prevSlide()"
+      >
+        <lucide-icon [img]="ChevronLeft" class="w-5 h-5" aria-hidden="true" />
+      </button>
+
+      <button
+        type="button"
+        title="Siguiente (→)"
+        [disabled]="currentSlide() === slideCount() - 1"
+        class="absolute right-4 top-1/2 -translate-y-1/2 z-10
+               p-2 rounded-full bg-white/10 hover:bg-white/20 text-white
+               disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+        (click)="nextSlide()"
+      >
+        <lucide-icon [img]="ChevronRight" class="w-5 h-5" aria-hidden="true" />
+      </button>
+
+      <!-- Slide counter -->
+      <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-10
+                  px-3 py-1 rounded-full bg-white/10 text-white/70 text-xs tabular-nums">
+        {{ currentSlide() + 1 }} / {{ slideCount() }}
+      </div>
+    }
+
+    <!-- Exit button -->
+    <button
+      type="button"
+      title="Salir (Esc)"
+      class="absolute top-4 right-4 z-10
+             p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+      (click)="exitPresentation()"
+    >
+      <lucide-icon [img]="X" class="w-4 h-4" aria-hidden="true" />
+    </button>
+
+  </div>
+}
