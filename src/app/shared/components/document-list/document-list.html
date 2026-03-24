@@ -12,11 +12,11 @@
         >
           <!-- Thumbnail preview (first page, generated on save) -->
           @if (doc.thumbnailUrl) {
-            <div class="-mx-5 -mt-5 mb-0 h-32 overflow-hidden rounded-tl-xl rounded-tr-xl border-b border-border">
+            <div class="-mx-5 -mt-5 mb-0 h-32 overflow-hidden rounded-tl-xl rounded-tr-xl border-b border-border bg-[#f0f0eb] dark:bg-neutral-800 flex items-start justify-center">
               <img
                 [src]="doc.thumbnailUrl"
                 [alt]=""
-                class="w-full h-full object-cover object-top"
+                class="w-full h-full object-cover object-top drop-shadow-[0_2px_6px_rgba(0,0,0,0.12)]"
                 loading="lazy"
                 draggable="false"
               />

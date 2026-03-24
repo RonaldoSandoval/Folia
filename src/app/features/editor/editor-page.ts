@@ -7,6 +7,7 @@ import {
   OnDestroy,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -104,6 +105,10 @@ export class EditorPage implements OnInit, OnDestroy {
   // ── Editor content ─────────────────────────────────────────────────────────
 
   readonly isLoadingDocument = signal(true);
+  /** True while role/collab info loads in the background after the editor is visible. */
+  readonly isLoadingMeta     = signal(false);
+  /** True while Yjs is connecting (collab mode only). */
+  readonly yjsSyncing        = signal(false);
 
   readonly content       = signal('');
   readonly compiling      = signal(false);
@@ -171,6 +176,19 @@ export class EditorPage implements OnInit, OnDestroy {
     }
   }
 
+  constructor() {
+    // Re-compile automatically whenever the image registry changes so that
+    // documents referencing images never show a stale/broken preview after
+    // images finish loading from Storage or the user uploads a new file.
+    effect(() => {
+      const images = this.imageFiles();
+      const src    = this.content();
+      if (images.length > 0 && src && !this.isLoadingDocument()) {
+        this.triggerCompile(src);
+      }
+    });
+  }
+
   ngOnInit(): void {
     this.initDocument();
   }
@@ -185,50 +203,56 @@ export class EditorPage implements OnInit, OnDestroy {
       return;
     }
 
+    // ── Phase 1: show the editor immediately ──────────────────────────────
+    // Images are loaded before the first compile so that documents referencing
+    // images don't produce a "file not found" error on first open.
+    // The preview skeleton stays visible during the image download.
     this.documentTitle.set(doc.title);
     this.projectFiles.set(doc.files);
     this.activeFile.set(doc.activeFile);
 
-    // Load role and collaborators in parallel — they are independent requests.
+    const draft   = localStorage.getItem(this.draftKey);
+    const initial = draft ?? doc.content;
+    this.content.set(initial);
+    this.editorPanel()?.setContent(initial);
+
+    // Download images from Storage first, then compile.
+    // Errors are swallowed so a missing/empty bucket never blocks the editor.
+    await this.loadProjectImages().catch(() => {});
+    this.triggerCompile(initial);
+
+    // Hide the full-page spinner — the editor is interactive from this point.
+    this.isLoadingDocument.set(false);
+
+    // ── Phase 2: load role / collab in background ─────────────────────────
+    this.isLoadingMeta.set(true);
+
     const [role] = await Promise.all([
       this.collaborationService.loadRole(this.documentId),
       this.collaborationService.loadCollaborators(this.documentId),
     ]);
 
-    // 'admin' maps to 'editor' for UI purposes (full edit access).
-    const uiRole = role === 'admin' ? 'editor' : role;
+    this.isLoadingMeta.set(false);
+
+    const uiRole    = role === 'admin' ? 'editor' : role;
     this.userRole.set(uiRole);
 
     const collabList = this.collaborationService.collaborators();
-
-    // Collaborative when the user is a collaborator OR when there are collaborators.
-    const isCollab = role !== 'owner' || collabList.length > 0;
+    const isCollab   = role !== 'owner' || collabList.length > 0;
     this.isCollaborative.set(isCollab);
 
     if (isCollab) {
-      // initYjs must complete before we hide the spinner — the editor is not
-      // ready until the Yjs binding is in place and the first compile fires.
+      // Show a non-blocking syncing chip while Yjs connects.
+      this.yjsSyncing.set(true);
       await this.initYjs(doc.content);
+      this.yjsSyncing.set(false);
+      // Discard any local draft — Yjs state is authoritative in collab mode.
+      localStorage.removeItem(this.draftKey);
     } else {
-      // Solo mode — existing draft/content logic.
-      const draft   = localStorage.getItem(this.draftKey);
-      const initial = draft ?? doc.content;
-      this.content.set(initial);
       if (draft) this.saveStatus.set('sin-guardar');
-      this.editorPanel()?.setContent(initial);
-      this.triggerCompile(initial);
     }
 
-    // Hide the loading overlay only after all async setup (including initYjs) is done.
-    this.isLoadingDocument.set(false);
-
-    this.loadProjectImages().catch(() => {});
-
-    // Schedule a thumbnail update on every editor open so existing documents
-    // that predate this feature get their preview generated automatically.
     this.scheduleThumbnailUpdate();
-
-    // Watch for collaborator changes so the UI stays in sync.
     this.watchCollaboratorChanges();
   }
 

@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  OnInit,
   computed,
   inject,
   input,
@@ -12,12 +13,21 @@ import {
 } from '@angular/core';
 import { Button } from '../button/button';
 import { Modal } from '../modal/modal';
-import { DOCUMENT_TEMPLATES, type DocumentTemplate } from '../../../core/templates/document-templates';
 import type { ProjectAsset, ProjectFile } from '../../../core/service/document/document.service';
 import {
   TypstUniverseService,
   type UniverseTemplate,
 } from '../../../core/service/typst-universe/typst-universe.service';
+
+/** Synthetic blank-document entry shown as the first card in the gallery. */
+const BLANK: UniverseTemplate = {
+  name: '__blank__',
+  version: '',
+  description: 'Documento vacío para empezar desde cero.',
+  categories: [],
+  keywords: [],
+  template: { path: '', entrypoint: 'main.typ', thumbnail: '' },
+};
 
 export interface CreateDocumentEvent {
   title: string;
@@ -31,92 +41,95 @@ export interface CreateDocumentEvent {
   templateUrl: './create-document-dialog.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CreateDocumentDialog implements AfterViewInit {
-  readonly dialogTitle = input('Nuevo documento');
-  readonly inputLabel  = input('Nombre del documento');
-  readonly placeholder = input('Ej: Mi investigación');
-
-  /** When true, shows the template picker before the title step. */
+export class CreateDocumentDialog implements OnInit, AfterViewInit {
+  readonly dialogTitle   = input('Nuevo documento');
+  readonly inputLabel    = input('Nombre del documento');
+  readonly placeholder   = input('Ej: Mi investigación');
   readonly showTemplates = input(false);
 
   readonly confirm = output<CreateDocumentEvent>();
   readonly cancel  = output<void>();
 
   protected readonly universeService = inject(TypstUniverseService);
-  protected readonly templates       = DOCUMENT_TEMPLATES;
+  protected readonly BLANK = BLANK;
 
-  // ── Wizard state ───────────────────────────────────────────────────────────
+  // ── Wizard ────────────────────────────────────────────────────────────────
+  protected readonly step  = signal<'template' | 'name'>('template');
+  protected readonly title = signal('');
 
-  protected readonly step            = signal<'template' | 'name'>('template');
-  protected readonly selectedTemplate = signal<DocumentTemplate>(DOCUMENT_TEMPLATES[0]);
-  protected readonly title           = signal('');
+  // ── Gallery ───────────────────────────────────────────────────────────────
+  protected readonly universeTemplates   = signal<UniverseTemplate[]>([]);
+  protected readonly universeLoading     = signal(false);
+  protected readonly universeError       = signal(false);
+  protected readonly universeSearch      = signal('');
+  protected readonly selectedCategory    = signal('all');
+  protected readonly selectedTemplate    = signal<UniverseTemplate | null>(null);
+  protected readonly downloadingTemplate = signal(false);
+  protected readonly downloadError       = signal(false);
 
-  // ── Universe state ─────────────────────────────────────────────────────────
-
-  protected readonly activeTab                = signal<'basic' | 'universe'>('basic');
-  protected readonly universeTemplates        = signal<UniverseTemplate[]>([]);
-  protected readonly universeLoading          = signal(false);
-  protected readonly universeError            = signal(false);
-  protected readonly universeSearch           = signal('');
-  protected readonly selectedUniverseTemplate = signal<UniverseTemplate | null>(null);
-  protected readonly downloadingTemplate      = signal(false);
-  protected readonly downloadError            = signal(false);
-
-  protected readonly filteredUniverseTemplates = computed(() => {
-    const q   = this.universeSearch().toLowerCase().trim();
-    const all = this.universeTemplates();
-    if (!q) return all;
-    return all.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.description?.toLowerCase().includes(q) ||
-        t.keywords?.some((k) => k.toLowerCase().includes(q)),
-    );
+  /** Top categories sorted by frequency across all templates. */
+  protected readonly availableCategories = computed(() => {
+    const counts = new Map<string, number>();
+    for (const t of this.universeTemplates()) {
+      for (const c of t.categories ?? []) {
+        counts.set(c, (counts.get(c) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([c]) => c);
   });
 
-  // Chip shown in step 2 reflecting the template chosen in step 1.
-  protected readonly chipLabel = computed(() =>
-    this.activeTab() === 'universe'
-      ? (this.selectedUniverseTemplate()?.name ?? '')
-      : this.selectedTemplate().name,
-  );
-  protected readonly chipIcon = computed(() =>
-    this.activeTab() === 'universe' ? '🌐' : this.selectedTemplate().icon,
+  protected readonly filteredTemplates = computed(() => {
+    const q   = this.universeSearch().toLowerCase().trim();
+    const cat = this.selectedCategory();
+    let list  = this.universeTemplates();
+    if (cat !== 'all') list = list.filter((t) => t.categories?.includes(cat));
+    if (q) {
+      list = list.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.description?.toLowerCase().includes(q) ||
+          t.keywords?.some((k) => k.toLowerCase().includes(q)),
+      );
+    }
+    return list;
+  });
+
+  protected readonly canProceed = computed(() => this.selectedTemplate() !== null);
+
+  /** Whether the blank card should be visible (hidden when searching or filtering). */
+  protected readonly showBlankCard = computed(
+    () => this.selectedCategory() === 'all' && !this.universeSearch().trim(),
   );
 
-  // "Siguiente" is disabled when Universe tab is active but nothing is selected.
-  protected readonly canProceed = computed(
-    () => this.activeTab() === 'basic' || this.selectedUniverseTemplate() !== null,
+  protected readonly chipLabel = computed(() => {
+    const t = this.selectedTemplate();
+    if (!t) return '';
+    return t.name === '__blank__' ? 'En blanco' : t.name;
+  });
+  protected readonly chipIcon = computed(() =>
+    this.selectedTemplate()?.name === '__blank__' ? '📄' : '🌐',
   );
 
   private readonly inputRef = viewChild<ElementRef<HTMLInputElement>>('titleInput');
-
-  /** Files to load into the new document; set by nextStep() before moving to step 2. */
   private pendingFiles:  ProjectFile[]  = [{ name: 'main.typ', content: '' }];
   private pendingAssets: ProjectAsset[] = [];
 
-  ngAfterViewInit(): void {
-    if (!this.showTemplates()) {
-      this.step.set('name');
-    }
-    this.focusInput();
+  ngOnInit(): void {
+    if (this.showTemplates()) this.loadUniverse();
   }
 
-  // ── Tab switching ──────────────────────────────────────────────────────────
-
-  protected switchTab(tab: 'basic' | 'universe'): void {
-    this.activeTab.set(tab);
-    if (tab === 'universe' && this.universeTemplates().length === 0 && !this.universeLoading()) {
-      this.loadUniverse();
-    }
+  ngAfterViewInit(): void {
+    if (!this.showTemplates()) this.step.set('name');
+    this.focusInput();
   }
 
   protected async loadUniverse(): Promise<void> {
     this.universeLoading.set(true);
     this.universeError.set(false);
     try {
-      const templates = await this.universeService.getTemplates();
-      this.universeTemplates.set(templates);
+      this.universeTemplates.set(await this.universeService.getTemplates());
     } catch {
       this.universeError.set(true);
     } finally {
@@ -124,28 +137,26 @@ export class CreateDocumentDialog implements AfterViewInit {
     }
   }
 
-  // ── Template selection ─────────────────────────────────────────────────────
-
-  protected selectTemplate(template: DocumentTemplate): void {
-    this.selectedTemplate.set(template);
+  protected selectTemplate(t: UniverseTemplate): void {
+    this.selectedTemplate.set(t);
   }
 
-  protected selectUniverseTemplate(template: UniverseTemplate): void {
-    this.selectedUniverseTemplate.set(template);
+  protected selectCategory(cat: string): void {
+    this.selectedCategory.set(cat);
   }
-
-  // ── Wizard navigation ──────────────────────────────────────────────────────
 
   protected async nextStep(): Promise<void> {
+    const t = this.selectedTemplate();
+    if (!t) return;
     this.downloadError.set(false);
 
-    if (this.activeTab() === 'universe') {
-      const t = this.selectedUniverseTemplate();
-      if (!t) return;
-
+    if (t.name === '__blank__') {
+      this.pendingFiles  = [{ name: 'main.typ', content: '' }];
+      this.pendingAssets = [];
+    } else {
       this.downloadingTemplate.set(true);
       try {
-        const result = await this.universeService.downloadTemplate(t);
+        const result      = await this.universeService.downloadTemplate(t);
         this.pendingFiles  = result.files;
         this.pendingAssets = result.assets;
       } catch {
@@ -154,9 +165,6 @@ export class CreateDocumentDialog implements AfterViewInit {
         return;
       }
       this.downloadingTemplate.set(false);
-    } else {
-      this.pendingFiles  = this.selectedTemplate().files;
-      this.pendingAssets = [];
     }
 
     this.step.set('name');
@@ -187,7 +195,7 @@ export class CreateDocumentDialog implements AfterViewInit {
 
   protected get modalSize(): 'md' | 'lg' | 'xl' {
     if (!this.showTemplates()) return 'md';
-    return this.step() === 'template' && this.activeTab() === 'universe' ? 'xl' : 'lg';
+    return this.step() === 'template' ? 'xl' : 'lg';
   }
 
   private focusInput(): void {

@@ -155,6 +155,54 @@ export class FilesSidebar implements AfterViewChecked {
     this.imageFiles().filter((img) => !img.name.includes('/')),
   );
 
+  // ── Pagination ─────────────────────────────────────────────────────────────
+
+  private static readonly IMAGE_LIMIT = 12;
+  private static readonly FILE_LIMIT  = 15;
+
+  /** Keys of sections where the user clicked "ver más". 'root' = root images/files. */
+  private readonly expandedImages = signal<Set<string>>(new Set());
+  private readonly expandedFiles  = signal<Set<string>>(new Set());
+
+  protected visibleFolderFiles(folderName: string): ProjectFile[] {
+    const all = this.filesInFolder(folderName);
+    return this.expandedFiles().has(folderName) ? all : all.slice(0, FilesSidebar.FILE_LIMIT);
+  }
+  protected hiddenFolderFileCount(folderName: string): number {
+    const count = this.filesInFolder(folderName).length;
+    if (this.expandedFiles().has(folderName) || count <= FilesSidebar.FILE_LIMIT) return 0;
+    return count - FilesSidebar.FILE_LIMIT;
+  }
+  protected expandFolderFiles(folderName: string): void {
+    this.expandedFiles.update((s) => new Set([...s, folderName]));
+  }
+
+  protected visibleFolderImages(folderName: string): ImageFile[] {
+    const all = this.imagesInFolder(folderName);
+    return this.expandedImages().has(folderName) ? all : all.slice(0, FilesSidebar.IMAGE_LIMIT);
+  }
+  protected hiddenFolderImageCount(folderName: string): number {
+    const count = this.imagesInFolder(folderName).length;
+    if (this.expandedImages().has(folderName) || count <= FilesSidebar.IMAGE_LIMIT) return 0;
+    return count - FilesSidebar.IMAGE_LIMIT;
+  }
+  protected expandFolderImages(folderName: string): void {
+    this.expandedImages.update((s) => new Set([...s, folderName]));
+  }
+
+  protected readonly visibleRootImages = computed(() => {
+    const all = this.rootImages();
+    return this.expandedImages().has('root') ? all : all.slice(0, FilesSidebar.IMAGE_LIMIT);
+  });
+  protected readonly hiddenRootImageCount = computed(() => {
+    const count = this.rootImages().length;
+    if (this.expandedImages().has('root') || count <= FilesSidebar.IMAGE_LIMIT) return 0;
+    return count - FilesSidebar.IMAGE_LIMIT;
+  });
+  protected expandRootImages(): void {
+    this.expandedImages.update((s) => new Set([...s, 'root']));
+  }
+
   // ── Collapse state ─────────────────────────────────────────────────────────
 
   protected readonly collapsedFolders = signal<Set<string>>(new Set());
@@ -377,15 +425,21 @@ export class FilesSidebar implements AfterViewChecked {
 
   // ── AfterViewChecked — auto-focus pending inputs ───────────────────────────
 
-  private prevImageCount = 0;
+  private prevImageCount    = 0;
+  /** Names explicitly uploaded by the user via the file picker — the only ones that get auto-renamed. */
+  private pendingRenames    = new Set<string>();
 
   constructor() {
     effect(() => {
       const imgs = this.imageFiles();
       const prev = this.prevImageCount;
       this.prevImageCount = imgs.length;
-      if (imgs.length > prev && imgs.length > 0) {
-        setTimeout(() => this.startRename(imgs[imgs.length - 1].name));
+      if (imgs.length > prev && this.pendingRenames.size > 0) {
+        const newest = imgs[imgs.length - 1];
+        if (this.pendingRenames.has(newest.name)) {
+          this.pendingRenames.delete(newest.name);
+          setTimeout(() => this.startRename(newest.name));
+        }
       }
     });
   }
@@ -428,6 +482,7 @@ export class FilesSidebar implements AfterViewChecked {
     for (const file of files) {
       const buffer = await file.arrayBuffer();
       const name   = folder ? `${folder}/${file.name}` : file.name;
+      this.pendingRenames.add(name);
       this.imageUpload.emit({ name, data: new Uint8Array(buffer) });
     }
     this.uploadingToFolder.set(null);

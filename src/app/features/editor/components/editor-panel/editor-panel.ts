@@ -24,6 +24,7 @@ import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 import { ThemeService } from '../../../../core/service/theme/theme-service';
 
+
 export interface YjsBinding {
   yText:     Y.Text;
   awareness: Awareness;
@@ -93,7 +94,7 @@ export class EditorPanel implements OnDestroy {
   protected readonly inlineCmd  = signal<InlineCmd | null>(null);
   protected readonly inlineDraft = signal('');
 
-  private readonly host          = viewChild.required<ElementRef<HTMLDivElement>>('host');
+  private readonly host           = viewChild.required<ElementRef<HTMLDivElement>>('host');
   private readonly inlineInputRef = viewChild<ElementRef<HTMLInputElement>>('inlineInput');
   private readonly inlineDoneRef  = viewChild<ElementRef<HTMLDivElement>>('inlineDone');
 
@@ -111,10 +112,12 @@ export class EditorPanel implements OnDestroy {
   private readonly readonlyCompartment = new Compartment();
 
   private readonly structuralTheme = EditorView.theme({
-    '&':          { height: '100%', fontSize: '13px' },
-    '.cm-content': { fontFamily: '"JetBrains Mono", "Fira Code", monospace' },
+    '&':           { height: '100%', fontSize: '13px' },
+    '.cm-content':  { fontFamily: '"JetBrains Mono", "Fira Code", monospace' },
     '.cm-scroller': { overflow: 'auto' },
+
   });
+
 
   private readonly lightTheme = EditorView.theme({
     '&':                     { backgroundColor: '#ffffff', color: '#000000' },
