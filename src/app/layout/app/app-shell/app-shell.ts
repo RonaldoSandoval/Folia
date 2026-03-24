@@ -14,7 +14,7 @@ import type { FolderItem } from '../../../core/service/document/document.service
 import { DocumentService } from '../../../core/service/document/document.service';
 import { Button } from '../../../shared/components/button/button';
 import { ConfirmDeleteDialog } from '../../../shared/components/confirm-delete-dialog/confirm-delete-dialog';
-import { CreateDocumentDialog } from '../../../shared/components/create-document-dialog/create-document-dialog';
+import { CreateDocumentDialog, type CreateDocumentEvent } from '../../../shared/components/create-document-dialog/create-document-dialog';
 import { DocumentItem } from '../../../shared/components/document-list/document-list';
 import { Dropdown, DropdownItem } from '../../../shared/components/dropdown/dropdown';
 import { RenameDialog } from '../../../shared/components/rename-dialog/rename-dialog';
@@ -95,10 +95,10 @@ export class AppShell {
 
   createDocument(): void { this.showCreateDialog.set(true); }
 
-  async confirmCreate(title: string): Promise<void> {
+  async confirmCreate(event: CreateDocumentEvent): Promise<void> {
     this.showCreateDialog.set(false);
     this.isProcessing.set(true);
-    await this.documentService.create(title, this.currentFolderId());
+    await this.documentService.create(event.title, this.currentFolderId(), event.files);
     this.isProcessing.set(false);
   }
 
@@ -133,9 +133,9 @@ export class AppShell {
 
   createFolder(): void { this.showCreateFolderDialog.set(true); }
 
-  confirmCreateFolder(name: string): void {
+  confirmCreateFolder(event: CreateDocumentEvent): void {
     this.showCreateFolderDialog.set(false);
-    this.documentService.createFolder(name, this.currentFolderId());
+    this.documentService.createFolder(event.title, this.currentFolderId());
   }
 
   openFolder(folder: FolderItem): void { this.currentFolderId.set(folder.id); }

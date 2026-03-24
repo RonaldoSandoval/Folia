@@ -142,6 +142,36 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
     this.zoom.set(1.0);
   }
 
+  /**
+   * Captures the first rendered page as a 400-px-wide PNG blob.
+   *
+   * Reads directly from the canvas that the renderer already painted into the
+   * container — no WASM renderer call needed, so there is no risk of conflicting
+   * with an in-progress render cycle.
+   *
+   * Returns `null` when the preview is not yet rendered or the canvas is empty.
+   */
+  async captureFirstPage(): Promise<Blob | null> {
+    const src = this.container().nativeElement.querySelector('canvas');
+    if (!src || src.width === 0) return null;
+
+    const W   = 400;
+    const H   = Math.round(src.height * (W / src.width));
+    const out = document.createElement('canvas');
+    out.width  = W;
+    out.height = H;
+
+    const ctx = out.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(src, 0, 0, W, H);
+
+    // JPEG at 0.75 quality — sharp enough for card previews (~20–50 KB as base64).
+    return new Promise((resolve) => out.toBlob(resolve, 'image/jpeg', 0.75));
+  }
+
   protected fitWidth(): void {
     const scroll  = this.scrollArea()?.nativeElement;
     const wrapper = this.container().nativeElement;

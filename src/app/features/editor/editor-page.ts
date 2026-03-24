@@ -14,6 +14,7 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { createTypstRenderer } from '@myriaddreamin/typst.ts';
 import { withGlobalRenderer } from '@myriaddreamin/typst.ts/contrib/global-renderer';
+import { AssetService } from '../../core/service/asset/asset.service';
 import * as Y from 'yjs';
 import { CompilerService } from '../../core/service/compiler/compiler-service';
 import { AiService } from '../../core/service/ai/ai.service';
@@ -74,14 +75,16 @@ export class EditorPage implements OnInit, OnDestroy {
   private readonly zone                 = inject(NgZone);
   private readonly compiler             = inject(CompilerService);
   private readonly aiService            = inject(AiService);
+  private readonly assetService         = inject(AssetService);
   private readonly documentService      = inject(DocumentService);
   private readonly collaborationService = inject(CollaborationService);
   private readonly auth                 = inject(AuthService);
   private readonly toast                = inject(ToastService);
   private readonly supabase             = inject(SUPABASE);
 
-  private compileTimer:   ReturnType<typeof setTimeout> | null = null;
-  private autoSaveTimer:  ReturnType<typeof setTimeout> | null = null;
+  private compileTimer:     ReturnType<typeof setTimeout> | null = null;
+  private autoSaveTimer:    ReturnType<typeof setTimeout> | null = null;
+  private thumbnailTimer:   ReturnType<typeof setTimeout> | null = null;
 
   /** Debounce delay before auto-saving after the last keystroke (ms). */
   private readonly AUTO_SAVE_DEBOUNCE_MS = 2_000;
@@ -134,10 +137,13 @@ export class EditorPage implements OnInit, OnDestroy {
   private collaboratorWatchChannel: RealtimeChannel | null = null;
 
   /** Reference to the EditorPanel child — used to call `setContent()` in solo mode. */
-  private readonly editorPanel = viewChild(EditorPanel);
+  private readonly editorPanel  = viewChild(EditorPanel);
 
   /** Reference to the ChatPanel child — used to inject quoted context from editor selections. */
-  private readonly chatPanel = viewChild(ChatPanel);
+  private readonly chatPanel    = viewChild(ChatPanel);
+
+  /** Reference to the PreviewPanel child — used to capture thumbnail from the already-rendered canvas. */
+  private readonly previewPanel = viewChild(PreviewPanel);
 
   @HostListener('document:keydown', ['$event'])
   onKeydown(event: KeyboardEvent): void {
@@ -215,6 +221,18 @@ export class EditorPage implements OnInit, OnDestroy {
 
     // Hide the loading overlay only after all async setup (including initYjs) is done.
     this.isLoadingDocument.set(false);
+
+    // IMAGE PERSISTENCE — PENDIENTE (plan gratuito de Supabase)
+    // La lógica de persistencia de imágenes requiere el bucket "project-assets"
+    // en Supabase Storage, que no está disponible en el plan gratuito actual.
+    // Para activarla: crear el bucket, ejecutar las políticas RLS del archivo
+    // supabase/migrations/add_thumbnails_and_storage.sql y descomentar la línea.
+    //
+    // this.loadProjectImages().catch(() => {});
+
+    // Schedule a thumbnail update on every editor open so existing documents
+    // that predate this feature get their preview generated automatically.
+    this.scheduleThumbnailUpdate();
 
     // Watch for collaborator changes so the UI stays in sync.
     this.watchCollaboratorChanges();
@@ -312,8 +330,9 @@ export class EditorPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.compileTimer  !== null) clearTimeout(this.compileTimer);
-    if (this.autoSaveTimer !== null) clearTimeout(this.autoSaveTimer);
+    if (this.compileTimer   !== null) clearTimeout(this.compileTimer);
+    if (this.autoSaveTimer  !== null) clearTimeout(this.autoSaveTimer);
+    if (this.thumbnailTimer !== null) clearTimeout(this.thumbnailTimer);
     for (const img of this.imageFiles()) URL.revokeObjectURL(img.previewUrl);
 
     // In collaborative mode, sync the final Yjs text back to the `content` column
@@ -337,7 +356,6 @@ export class EditorPage implements OnInit, OnDestroy {
     if (this.autoSaveTimer !== null) clearTimeout(this.autoSaveTimer);
     this.autoSaveTimer = setTimeout(() => {
       this.autoSaveTimer = null;
-      console.log('[AutoSave] triggered for document:', this.documentId);
       this.saveDocument();
     }, this.AUTO_SAVE_DEBOUNCE_MS);
   }
@@ -396,6 +414,7 @@ export class EditorPage implements OnInit, OnDestroy {
         this.documentService.saveContent(this.documentId, contentToSave),
       ]).then(() => {
         this.saveStatus.set('guardado');
+        this.scheduleThumbnailUpdate();
       }).catch(() => {
         this.saveStatus.set('sin-guardar');
         this.toast.error('Error al guardar. Comprueba tu conexión.');
@@ -416,6 +435,7 @@ export class EditorPage implements OnInit, OnDestroy {
         if (localStorage.getItem(this.draftKey) === savedContent) {
           localStorage.removeItem(this.draftKey);
         }
+        this.scheduleThumbnailUpdate();
       }
     });
   }
@@ -712,6 +732,7 @@ export class EditorPage implements OnInit, OnDestroy {
     ]);
     this.compiler.addFile(`/${file.name}`, file.data);
     this.triggerCompile(this.content());
+    // void this.assetService.uploadImage(this.documentId, file.name, file.data); // IMAGE PERSISTENCE — PENDIENTE
   }
 
   onImageRename(event: { oldName: string; newName: string }): void {
@@ -724,6 +745,7 @@ export class EditorPage implements OnInit, OnDestroy {
       imgs.map((i) => (i.name === oldName ? { ...i, name: newName } : i)),
     );
     this.triggerCompile(this.content());
+    // void this.assetService.renameImage(this.documentId, oldName, newName); // IMAGE PERSISTENCE — PENDIENTE
   }
 
   onImageDelete(name: string): void {
@@ -733,6 +755,74 @@ export class EditorPage implements OnInit, OnDestroy {
     this.compiler.removeFile(`/${name}`);
     this.imageFiles.update((imgs) => imgs.filter((i) => i.name !== name));
     this.triggerCompile(this.content());
+    // void this.assetService.deleteImage(this.documentId, name); // IMAGE PERSISTENCE — PENDIENTE
+  }
+
+  // ── Image persistence ──────────────────────────────────────────────────────
+  //
+  // PENDIENTE — Requiere Supabase Storage (bucket "project-assets", privado).
+  //
+  // Por qué no se completó:
+  //   El plan gratuito de Supabase no permite crear nuevos buckets de Storage.
+  //   Sin el bucket, las llamadas a uploadImage / loadImages / deleteImage /
+  //   renameImage fallan con "Bucket not found" (HTTP 400).
+  //
+  // Qué hace esta lógica cuando esté activa:
+  //   Al abrir el editor, descarga todas las imágenes del proyecto desde
+  //   Storage y las registra en el sistema de archivos virtual del compilador
+  //   Typst, restaurando el estado exacto de la sesión anterior.
+  //
+  // Para activarla cuando el plan lo permita:
+  //   1. Crear el bucket "project-assets" (privado, RLS habilitado).
+  //   2. Ejecutar las políticas RLS de supabase/migrations/add_thumbnails_and_storage.sql.
+  //   3. Descomentar las cuatro líneas marcadas "IMAGE PERSISTENCE — PENDIENTE"
+  //      en onImageUpload, onImageRename, onImageDelete e initDocument.
+
+  // private async loadProjectImages(): Promise<void> {
+  //   const images = await this.assetService.loadImages(this.documentId);
+  //   if (!images.length) return;
+  //
+  //   for (const img of images) {
+  //     const previewUrl = URL.createObjectURL(new Blob([img.data.buffer as ArrayBuffer]));
+  //     const existing   = this.imageFiles().find((i) => i.name === img.name);
+  //     if (existing) URL.revokeObjectURL(existing.previewUrl);
+  //     this.imageFiles.update((imgs) => [
+  //       ...imgs.filter((i) => i.name !== img.name),
+  //       { name: img.name, previewUrl, data: img.data },
+  //     ]);
+  //     this.compiler.addFile(`/${img.name}`, img.data);
+  //   }
+  //   this.triggerCompile(this.content());
+  // }
+
+  // ── Thumbnail ───────────────────────────────────────────────────────────────
+
+  /**
+   * Schedules a thumbnail update with a 10 s debounce so rapid successive
+   * saves (auto-save) don't trigger multiple renders.
+   *
+   * Called after every successful save.
+   */
+  private scheduleThumbnailUpdate(): void {
+    if (this.thumbnailTimer !== null) clearTimeout(this.thumbnailTimer);
+    this.thumbnailTimer = setTimeout(() => {
+      this.thumbnailTimer = null;
+      void this.generateAndUploadThumbnail();
+    }, 10_000);
+  }
+
+  /**
+   * Captures the first page from the PreviewPanel's already-rendered canvas
+   * and uploads it as a thumbnail PNG via AssetService.
+   *
+   * Reading a DOM canvas requires no WASM renderer call, so there is zero risk
+   * of conflicting with the PreviewPanel's own render cycle.
+   */
+  private async generateAndUploadThumbnail(): Promise<void> {
+    const blob = await this.previewPanel()?.captureFirstPage() ?? null;
+    if (!blob) return;
+    const url = await this.assetService.uploadThumbnail(this.documentId, blob);
+    if (url) this.documentService.saveThumbnailUrl(this.documentId, url);
   }
 
   // ── Folder management ──────────────────────────────────────────────────────
@@ -771,15 +861,20 @@ export class EditorPage implements OnInit, OnDestroy {
 // ---------------------------------------------------------------------------
 
 /**
- * Removes the outermost code fence wrapper that the AI sometimes adds despite
- * instructions. Handles:
- *  - ```typst\n...\n```
- *  - ```\n...\n```
- * Content-internal fences (e.g. code examples inside the document) are preserved.
+ * Extracts only the raw Typst content from an AI response.
+ *
+ * The model occasionally ignores instructions and returns prose before a code
+ * block. This function handles all observed patterns:
+ *  1. Response is entirely a ```typst fence  → strip fences, return content.
+ *  2. Response has prose + ```typst block    → discard prose, return block content.
+ *  3. Response has prose + ``` block         → same as above.
+ *  4. Response is already raw Typst          → return as-is.
  */
 function stripInlineCodeFences(text: string): string {
-  return text
-    .replace(/^```(?:typst)?\r?\n/, '')   // opening fence
-    .replace(/\r?\n```\s*$/, '')           // closing fence
-    .trim();
+  // Try to extract the first ```typst (or generic ```) code block anywhere.
+  const fenceMatch = text.match(/```(?:typst)?\r?\n([\s\S]*?)```/);
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+  return text.trim();
 }

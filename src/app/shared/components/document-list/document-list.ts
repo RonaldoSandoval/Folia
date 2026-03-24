@@ -25,6 +25,8 @@ export interface DocumentItem {
   isOwned?: boolean;
   /** True when the document has at least one collaborator (owner perspective). */
   hasCollaborators?: boolean;
+  /** Public URL of the first-page thumbnail PNG, or null when not yet generated. */
+  thumbnailUrl?: string | null;
 }
 
 // ---------------------------------------------------------------------------

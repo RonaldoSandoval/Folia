@@ -38,6 +38,9 @@ export class Modal implements OnInit, OnDestroy {
   /** Displayed in the modal header. */
   readonly title = input<string>('');
 
+  /** Controls the max-width of the panel. Defaults to 'md' (28rem). */
+  readonly size = input<'md' | 'lg'>('md');
+
   /** Emitted when the user requests to close the modal. */
   readonly close = output<void>();
 

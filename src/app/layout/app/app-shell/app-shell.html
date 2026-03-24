@@ -131,6 +131,7 @@
 <!-- Create document -->
 @if (showCreateDialog()) {
   <app-create-document-dialog
+    [showTemplates]="true"
     (confirm)="confirmCreate($event)"
     (cancel)="showCreateDialog.set(false)"
   />

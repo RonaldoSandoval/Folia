@@ -50,7 +50,7 @@ export interface Document extends DocumentItem {
 
 const DEFAULT_CONTENT = '';
 
-const SELECT = 'id, title, content, files, active_file, folder_id, updated_at, owner_id, document_collaborators(id)' as const;
+const SELECT = 'id, title, content, files, active_file, folder_id, updated_at, owner_id, thumbnail_url, document_collaborators(id)' as const;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -65,6 +65,7 @@ interface DocumentRow {
   folder_id: string | null;
   updated_at: string;
   owner_id: string;
+  thumbnail_url: string | null;
   document_collaborators: { id: string }[];
 }
 
@@ -87,6 +88,7 @@ function mapRow(row: DocumentRow, currentUserId?: string): Document {
     updatedAt:         new Date(row.updated_at),
     isOwned:           currentUserId ? row.owner_id === currentUserId : true,
     hasCollaborators:  (row.document_collaborators?.length ?? 0) > 0,
+    thumbnailUrl:      row.thumbnail_url ?? null,
   };
 }
 
@@ -126,8 +128,8 @@ export class DocumentService {
 
   /** Reactive list of document summaries consumed by AppShell / DocumentList. */
   readonly documents = computed<DocumentItem[]>(() =>
-    this._documents().map(({ id, title, updatedAt, folderId, isOwned, hasCollaborators }) => ({
-      id, title, updatedAt, folderId, isOwned, hasCollaborators,
+    this._documents().map(({ id, title, updatedAt, folderId, isOwned, hasCollaborators, thumbnailUrl }) => ({
+      id, title, updatedAt, folderId, isOwned, hasCollaborators, thumbnailUrl,
     })),
   );
 
@@ -209,20 +211,26 @@ export class DocumentService {
 
   // ── Document CRUD ─────────────────────────────────────────────────────────
 
-  async create(title = 'Sin título', folderId: string | null = null): Promise<void> {
+  async create(
+    title = 'Sin título',
+    folderId: string | null = null,
+    initialFiles?: ProjectFile[],
+  ): Promise<void> {
     const user = this.auth.user();
     if (!user) return;
 
-    const defaultFile: ProjectFile = { name: 'main.typ', content: DEFAULT_CONTENT };
+    const files       = initialFiles?.length ? initialFiles : [{ name: 'main.typ', content: DEFAULT_CONTENT }];
+    const activeFile  = files[0].name;
+    const content     = files[0].content;
 
     const { data, error } = await this.supabase
       .from('documents')
       .insert({
         owner_id:    user.id,
         title:       title.trim() || 'Sin título',
-        content:     DEFAULT_CONTENT,
-        files:       [defaultFile],
-        active_file: 'main.typ',
+        content,
+        files,
+        active_file: activeFile,
         folder_id:   folderId,
       })
       .select(SELECT)
@@ -236,6 +244,22 @@ export class DocumentService {
     const doc = mapRow(data as DocumentRow);
     this._documents.update((docs) => [doc, ...docs]);
     await this.router.navigate(['/project', doc.id]);
+  }
+
+  /**
+   * Persists the thumbnail URL returned by AssetService after a successful upload.
+   * Updates the in-memory cache immediately so cards in AppShell refresh without
+   * a full page reload.
+   */
+  saveThumbnailUrl(id: string, url: string): void {
+    this._documents.update((docs) =>
+      docs.map((d) => (d.id === id ? { ...d, thumbnailUrl: url } : d)),
+    );
+    void this.supabase
+      .from('documents')
+      .update({ thumbnail_url: url })
+      .eq('id', id)
+      .then(() => {});
   }
 
   /**

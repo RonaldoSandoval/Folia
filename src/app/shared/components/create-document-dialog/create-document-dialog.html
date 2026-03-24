@@ -1,42 +1,97 @@
-<app-modal [title]="dialogTitle()" (close)="cancel.emit()">
+<app-modal [title]="modalTitle" [size]="showTemplates() ? 'lg' : 'md'" (close)="cancel.emit()">
 
-  <div class="space-y-4">
+  <!-- ── Step 1: template picker ─────────────────────────────────────────── -->
 
-    <!-- Input -->
-    <div class="space-y-1.5">
-      <label for="new-doc-title" class="text-sm font-medium text-foreground">
-        {{ inputLabel() }}
-      </label>
-      <input
-        #titleInput
-        id="new-doc-title"
-        type="text"
-        class="w-full px-3 py-2 rounded-lg border border-border bg-background
-               text-sm text-foreground placeholder:text-muted
-               focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/50
-               transition"
-        [placeholder]="placeholder()"
-        [value]="title()"
-        (input)="title.set($any($event.target).value)"
-        (keydown)="onKeydown($event)"
-      />
+  @if (showTemplates() && step() === 'template') {
+
+    <div class="space-y-4">
+
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        @for (template of templates; track template.id) {
+          <button
+            type="button"
+            class="flex flex-col items-start gap-2 p-3.5 rounded-xl border text-left
+                   transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40"
+            [class.border-brand]="selectedTemplate().id === template.id"
+            [class.bg-brand-subtle]="selectedTemplate().id === template.id"
+            [class.border-border]="selectedTemplate().id !== template.id"
+            [class.bg-surface]="selectedTemplate().id !== template.id"
+            [class.hover:bg-surface-hover]="selectedTemplate().id !== template.id"
+            (click)="selectTemplate(template)"
+          >
+            <span class="text-2xl leading-none">{{ template.icon }}</span>
+            <div>
+              <p class="text-sm font-medium text-foreground">{{ template.name }}</p>
+              <p class="text-xs text-secondary mt-0.5">{{ template.description }}</p>
+            </div>
+          </button>
+        }
+      </div>
+
+      <div class="flex justify-end pt-1">
+        <app-button variant="primary" size="sm" (click)="nextStep()">
+          Siguiente →
+        </app-button>
+      </div>
+
     </div>
 
-    <!-- Actions -->
-    <div class="flex justify-end gap-2 pt-1">
-      <app-button variant="secondary" size="sm" (click)="cancel.emit()">
-        Cancelar
-      </app-button>
-      <app-button
-        variant="primary"
-        size="sm"
-        [disabled]="title().trim().length === 0"
-        (click)="submit()"
-      >
-        Crear
-      </app-button>
+  }
+
+  <!-- ── Step 2: title input ─────────────────────────────────────────────── -->
+
+  @if (!showTemplates() || step() === 'name') {
+
+    <div class="space-y-4">
+
+      @if (showTemplates()) {
+        <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-hover">
+          <span class="text-lg leading-none">{{ selectedTemplate().icon }}</span>
+          <span class="text-sm text-foreground font-medium">{{ selectedTemplate().name }}</span>
+        </div>
+      }
+
+      <div class="space-y-1.5">
+        <label for="new-doc-title" class="text-sm font-medium text-foreground">
+          {{ inputLabel() }}
+        </label>
+        <input
+          #titleInput
+          id="new-doc-title"
+          type="text"
+          class="w-full px-3 py-2 rounded-lg border border-border bg-background
+                 text-sm text-foreground placeholder:text-muted
+                 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/50
+                 transition"
+          [placeholder]="placeholder()"
+          [value]="title()"
+          (input)="title.set($any($event.target).value)"
+          (keydown)="onKeydown($event)"
+        />
+      </div>
+
+      <div class="flex justify-end gap-2 pt-1">
+        @if (showTemplates()) {
+          <app-button variant="secondary" size="sm" (click)="back()">
+            ← Volver
+          </app-button>
+        } @else {
+          <app-button variant="secondary" size="sm" (click)="cancel.emit()">
+            Cancelar
+          </app-button>
+        }
+        <app-button
+          variant="primary"
+          size="sm"
+          [disabled]="title().trim().length === 0"
+          (click)="submit()"
+        >
+          Crear
+        </app-button>
+      </div>
+
     </div>
 
-  </div>
+  }
 
 </app-modal>

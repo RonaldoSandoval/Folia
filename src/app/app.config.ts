@@ -7,6 +7,7 @@ import { provideAiConfig } from './core/service/ai/ai-model-registry';
 import { provideDocumentService } from './core/service/document/document.service';
 import { provideAuthService } from './core/service/auth/auth.service';
 import { provideCollaborationService } from './core/service/collaboration/collaboration.service';
+import { provideAssetService } from './core/service/asset/asset.service';
 import { environment } from '../environments/environment';
 
 /**
@@ -52,5 +53,6 @@ export const appConfig: ApplicationConfig = {
     provideAiService(),
     // ───────────────────────────────────────────────────────────────────────
     provideCollaborationService(),
+    provideAssetService(),
   ],
 };

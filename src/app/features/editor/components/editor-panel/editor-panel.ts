@@ -194,7 +194,7 @@ export class EditorPanel implements OnDestroy {
     this.inlineCmd.set({ state: 'input', top, left, width });
     this.cdr.markForCheck();
 
-    queueMicrotask(() => {
+    setTimeout(() => {
       this.inlineInputRef()?.nativeElement.focus();
     });
   }
