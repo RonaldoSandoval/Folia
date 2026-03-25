@@ -15,7 +15,6 @@ import {
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { createTypstRenderer } from '@myriaddreamin/typst.ts';
-import { withGlobalRenderer } from '@myriaddreamin/typst.ts/contrib/global-renderer';
 import { AssetService } from '../../core/service/asset/asset.service';
 import * as Y from 'yjs';
 import { CompilerService } from '../../core/service/compiler/compiler-service';
@@ -35,6 +34,7 @@ import { PreviewPanel } from './components/preview-panel/preview-panel';
 import { SharingPanel } from './components/sharing-panel/sharing-panel';
 import { Spinner } from '../../shared/components/spinner/spinner';
 import { OutlinePanel, type OutlineHeading } from './components/outline-panel/outline-panel';
+import { ExportDialog, type ExportSelection } from './components/export-dialog/export-dialog';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 const RENDERER_OPTIONS = {
@@ -103,6 +103,7 @@ function formatHeadingNumber(counters: number[], format: string): string {
     ChatPanel,
     SharingPanel,
     Spinner,
+    ExportDialog,
   ],
   providers: [CompilerService, CollaborationService],
   templateUrl: './editor-page.html',
@@ -139,6 +140,8 @@ export class EditorPage implements OnInit, OnDestroy {
   readonly filesOpen   = signal(true);
   readonly chatOpen    = signal(false);
   readonly sharingOpen = signal(false);
+  /** Non-null while the export page-picker dialog is open. */
+  readonly exportDialogFormat = signal<'svg' | 'png' | null>(null);
 
   /** Active tab in the left sidebar: file tree or document outline. */
   readonly sidebarTab = signal<'files' | 'outline'>('files');
@@ -625,64 +628,104 @@ export class EditorPage implements OnInit, OnDestroy {
   }
 
   download(format: DownloadFormat): void {
-    const vectorData = this.vectorData();
-    const title      = this.documentTitle();
+    const title = this.documentTitle();
 
     if (format === 'pdf') {
-      this.compiler.exportPdf().then((bytes) => {
-        this.triggerDownload(`${title}.pdf`, new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }));
-      }).catch(() => {});
+      this.compiler.exportPdf()
+        .then((bytes) => {
+          this.triggerDownload(`${title}.pdf`, new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }));
+        })
+        .catch(() => {});
       return;
     }
 
+    // SVG / PNG → open the page-picker dialog; actual export runs in confirmExport().
+    this.exportDialogFormat.set(format);
+  }
+
+  async confirmExport(selection: ExportSelection): Promise<void> {
+    const format = this.exportDialogFormat();
+    this.exportDialogFormat.set(null);
+    if (!format) return;
+
+    const title = this.documentTitle();
+    const { page } = selection;
+
+    // ── PNG ──────────────────────────────────────────────────────────────────
+    if (format === 'png') {
+      const panel = this.previewPanel();
+      if (!panel) return;
+
+      if (page === 'all') {
+        const { zipSync } = await import('fflate');
+        const count = this.pageCount();
+        const files: Record<string, Uint8Array> = {};
+        for (let i = 0; i < count; i++) {
+          const blob = await panel.capturePageAt(i);
+          if (blob) {
+            files[`${title}-page-${i + 1}.png`] = new Uint8Array(await blob.arrayBuffer());
+          }
+        }
+        const zipData = zipSync(files);
+        this.triggerDownload(`${title}.zip`, new Blob([zipData.buffer as ArrayBuffer], { type: 'application/zip' }));
+      } else {
+        const blob = await panel.capturePageAt(page - 1);
+        if (blob) this.triggerDownload(`${title}-page-${page}.png`, blob);
+      }
+      return;
+    }
+
+    // ── SVG ──────────────────────────────────────────────────────────────────
+    const vectorData = this.vectorData();
     if (!vectorData) return;
 
-    if (format === 'svg') {
-      withGlobalRenderer(createTypstRenderer, RENDERER_OPTIONS, (renderer) => {
-        void renderer.renderSvg({ artifactContent: vectorData, format: 'vector' }).then((svgStr) => {
-          this.triggerDownload(`${title}.svg`, new Blob([svgStr], { type: 'image/svg+xml' }));
-        });
-      }, () => {});
-      return;
-    }
+    // Fresh renderer instance — avoids conflicting with the global preview renderer.
+    const renderer = createTypstRenderer();
+    try {
+      await renderer.init(RENDERER_OPTIONS);
 
-    withGlobalRenderer(createTypstRenderer, RENDERER_OPTIONS, (renderer) => {
-      void renderer.runWithSession(
-        { format: 'vector', artifactContent: vectorData },
-        async (session) => {
-          const pages      = renderer.retrievePagesInfoFromSession(session);
-          const pixelPerPt = 4;
-          const canvases: HTMLCanvasElement[] = [];
-
-          for (let i = 0; i < pages.length; i++) {
-            const canvas = document.createElement('canvas');
-            await session.renderCanvas({ canvas, pageOffset: i, pixelPerPt, backgroundColor: '#ffffff' });
-            canvases.push(canvas);
-          }
-
-          const gap         = 12;
-          const width       = Math.max(...canvases.map((c) => c.width));
-          const totalHeight = canvases.reduce((h, c, i) => h + c.height + (i < canvases.length - 1 ? gap : 0), 0);
-          const merged      = document.createElement('canvas');
-          merged.width      = width;
-          merged.height     = totalHeight;
-
-          const ctx = merged.getContext('2d')!;
-          ctx.fillStyle = '#f5f5f0';
-          ctx.fillRect(0, 0, width, totalHeight);
-
-          let y = 0;
-          for (let i = 0; i < canvases.length; i++) {
-            ctx.drawImage(canvases[i], Math.round((width - canvases[i].width) / 2), y);
-            y += canvases[i].height + gap;
-          }
-
-          merged.toBlob((blob) => {
-            if (blob) this.triggerDownload(`${title}.png`, blob);
-          }, 'image/png');
-        },
-      );
-    }, () => {});
+      if (page === 'all') {
+        const { zipSync, strToU8 } = await import('fflate');
+        const files: Record<string, Uint8Array> = {};
+        await renderer.runWithSession(
+          { format: 'vector', artifactContent: vectorData },
+          async (session) => {
+            const pages = renderer.retrievePagesInfoFromSession(session);
+            let cumY = 0;
+            for (let i = 0; i < pages.length; i++) {
+              const { width, height } = pages[i];
+              const svgStr = await renderer.renderSvg({
+                renderSession: session,
+                window: { lo: { x: 0, y: cumY }, hi: { x: width, y: cumY + height } },
+              });
+              files[`${title}-page-${i + 1}.svg`] = strToU8(svgStr);
+              cumY += height;
+            }
+          },
+        );
+        const zipData = zipSync(files);
+        this.triggerDownload(`${title}.zip`, new Blob([zipData.buffer as ArrayBuffer], { type: 'application/zip' }));
+      } else {
+        await renderer.runWithSession(
+          { format: 'vector', artifactContent: vectorData },
+          async (session) => {
+            const pages = renderer.retrievePagesInfoFromSession(session);
+            const idx   = page - 1;
+            let cumY = 0;
+            for (let i = 0; i < idx; i++) cumY += pages[i].height;
+            const { width, height } = pages[idx];
+            const svgStr = await renderer.renderSvg({
+              renderSession: session,
+              window: { lo: { x: 0, y: cumY }, hi: { x: width, y: cumY + height } },
+            });
+            this.triggerDownload(
+              `${title}-page-${page}.svg`,
+              new Blob([svgStr], { type: 'image/svg+xml' }),
+            );
+          },
+        );
+      }
+    } catch { /* silently ignore export errors */ }
   }
 
   private triggerDownload(filename: string, blob: Blob): void {

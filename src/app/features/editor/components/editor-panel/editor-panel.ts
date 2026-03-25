@@ -134,6 +134,42 @@ export class EditorPanel implements OnDestroy {
     '.cm-panels':   { display: 'none' },
   });
 
+  /**
+   * Overrides y-codemirror.next's baseTheme so remote cursors are always
+   * visible (not just on hover) and styled to match the app UI.
+   */
+  private readonly collaboratorCursorTheme = EditorView.theme({
+    // Caret: slightly thicker line, no right border
+    '.cm-ySelectionCaret': {
+      borderLeftWidth:  '2px',
+      borderRightWidth: '0',
+      marginLeft:       '-1px',
+      marginRight:      '0',
+    },
+    // Dot: a touch larger so it's easier to notice
+    '.cm-ySelectionCaretDot': {
+      width:  '.45em',
+      height: '.45em',
+      top:    '-.22em',
+      left:   '-.22em',
+    },
+    // Label: always visible, styled like the app's UI
+    '.cm-ySelectionInfo': {
+      opacity:        '1',
+      fontFamily:     '"Inter", system-ui, sans-serif',
+      fontSize:       '.68em',
+      fontWeight:     '600',
+      letterSpacing:  '0.01em',
+      borderRadius:   '3px 3px 3px 0',
+      padding:        '1px 5px',
+      top:            '-1.5em',
+      // Keep the hover rule working even after overriding opacity
+    },
+    '.cm-ySelectionCaret:hover > .cm-ySelectionInfo': {
+      opacity: '1',
+    },
+  });
+
   /** Match highlight styles for CodeMirror's search state field. */
   private readonly searchTheme = EditorView.theme({
     '.cm-searchMatch': {
@@ -520,6 +556,7 @@ export class EditorPanel implements OnDestroy {
       typst(),
       this.themeCompartment.of(isDark ? oneDark : this.lightTheme),
       this.structuralTheme,
+      this.collaboratorCursorTheme,
       this.searchTheme,
       this.readonlyCompartment.of(EditorView.editable.of(!this.readonly())),
       selectionListener,

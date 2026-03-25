@@ -1,0 +1,58 @@
+<app-modal [title]="title()" (close)="cancel.emit()">
+  <div class="space-y-4 px-1 pt-1">
+
+    <!-- Mode: specific page -->
+    <label class="flex items-start gap-3 cursor-pointer select-none">
+      <input
+        type="radio"
+        name="export-mode"
+        class="mt-0.5 accent-brand shrink-0"
+        [checked]="mode() === 'specific'"
+        (change)="mode.set('specific')"
+      />
+      <div class="flex flex-col gap-2">
+        <span class="text-sm font-medium text-foreground">Página específica</span>
+
+        @if (mode() === 'specific') {
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-muted">Página</span>
+            <input
+              type="number"
+              [value]="clampedPage()"
+              [min]="1"
+              [max]="pageCount()"
+              (input)="onPageInput($event)"
+              class="w-16 px-2 py-1 text-sm rounded-md border border-border bg-surface
+                     text-foreground focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+            <span class="text-xs text-muted">de {{ pageCount() }}</span>
+          </div>
+        }
+      </div>
+    </label>
+
+    <!-- Mode: all pages → ZIP -->
+    <label class="flex items-start gap-3 cursor-pointer select-none">
+      <input
+        type="radio"
+        name="export-mode"
+        class="mt-0.5 accent-brand shrink-0"
+        [checked]="mode() === 'all'"
+        (change)="mode.set('all')"
+      />
+      <div class="flex flex-col gap-0.5">
+        <span class="text-sm font-medium text-foreground">Todas las páginas</span>
+        <span class="text-xs text-muted">
+          Descarga un archivo <strong>.zip</strong> con cada página como archivo separado
+        </span>
+      </div>
+    </label>
+
+    <!-- Actions -->
+    <div class="flex justify-end gap-2 pt-2 border-t border-border">
+      <app-button variant="ghost" size="sm" (click)="cancel.emit()">Cancelar</app-button>
+      <app-button variant="primary" size="sm" (click)="onConfirm()">Descargar</app-button>
+    </div>
+
+  </div>
+</app-modal>

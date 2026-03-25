@@ -210,6 +210,61 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
   }
 
   /**
+   * Captures a single rendered page as a PNG blob.
+   *
+   * @param pageIndex — 0-based index into the `.typst-page canvas` elements.
+   * Returns `null` when the page has not yet been rendered.
+   */
+  async capturePageAt(pageIndex: number): Promise<Blob | null> {
+    const canvases = Array.from(
+      this.container().nativeElement.querySelectorAll<HTMLCanvasElement>('.typst-page canvas'),
+    );
+    const src = canvases[pageIndex];
+    if (!src || src.width === 0) return null;
+    return new Promise((resolve) => src.toBlob((b) => resolve(b), 'image/png'));
+  }
+
+  /**
+   * Stitches all rendered pages into a single PNG blob.
+   *
+   * Reads directly from the already-painted `.typst-page canvas` elements —
+   * no WASM renderer call needed, so there is no risk of conflicting with an
+   * in-progress render cycle on the global renderer singleton.
+   *
+   * Returns `null` when the preview has no rendered pages yet.
+   */
+  async captureAllPages(gap = 12): Promise<Blob | null> {
+    const container  = this.container().nativeElement;
+    const canvases   = Array.from(
+      container.querySelectorAll<HTMLCanvasElement>('.typst-page canvas'),
+    );
+    if (canvases.length === 0 || canvases[0].width === 0) return null;
+
+    const width      = Math.max(...canvases.map((c) => c.width));
+    const totalHeight = canvases.reduce(
+      (h, c, i) => h + c.height + (i < canvases.length - 1 ? gap : 0), 0,
+    );
+
+    const merged  = document.createElement('canvas');
+    merged.width  = width;
+    merged.height = totalHeight;
+
+    const ctx = merged.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#f5f5f0';
+    ctx.fillRect(0, 0, width, totalHeight);
+
+    let y = 0;
+    for (let i = 0; i < canvases.length; i++) {
+      ctx.drawImage(canvases[i], Math.round((width - canvases[i].width) / 2), y);
+      y += canvases[i].height + gap;
+    }
+
+    return new Promise((resolve) => merged.toBlob((b) => resolve(b), 'image/png'));
+  }
+
+  /**
    * Scrolls the preview to the given 1-based page number.
    * Uses a proportional estimate: the nth `.typst-page` element is scrolled into view.
    */

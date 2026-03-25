@@ -258,7 +258,17 @@
 
   </div>
 
-  <!-- ⑤ Loading overlay — shown while initDocument() resolves -->
+  <!-- ⑤ Export page-picker dialog (PNG / SVG) -->
+  @if (exportDialogFormat(); as fmt) {
+    <app-export-dialog
+      [format]="fmt"
+      [pageCount]="pageCount()"
+      (confirm)="confirmExport($event)"
+      (cancel)="exportDialogFormat.set(null)"
+    />
+  }
+
+  <!-- ⑥ Loading overlay — shown while initDocument() resolves -->
   @if (isLoadingDocument()) {
     <div class="absolute inset-0 z-50 flex flex-col items-center justify-center
                 bg-background/80 backdrop-blur-sm gap-3">
