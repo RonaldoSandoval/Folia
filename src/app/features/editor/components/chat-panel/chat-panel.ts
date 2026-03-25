@@ -10,7 +10,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { ArrowUp, ClipboardPaste, LucideAngularModule, Sparkles, Trash2, X, Zap } from 'lucide-angular';
+import { ArrowUp, ClipboardPaste, LucideAngularModule, Sparkles, Square, Trash2, X, Zap } from 'lucide-angular';
 import { AiService, RateLimitError, type AiMessage } from '../../../../core/service/ai/ai.service';
 import { Button } from '../../../../shared/components/button/button';
 
@@ -58,6 +58,7 @@ export class ChatPanel {
   protected readonly ArrowUp        = ArrowUp;
   protected readonly ClipboardPaste = ClipboardPaste;
   protected readonly Trash2         = Trash2;
+  protected readonly Square         = Square;
   protected readonly X              = X;
   protected readonly Zap            = Zap;
 
@@ -102,6 +103,13 @@ export class ChatPanel {
   readonly quotedContext  = signal<string | null>(null);
 
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
+  private chatCancelled = false;
+
+  // ── Cancel ─────────────────────────────────────────────────────────────────
+
+  cancelStreaming(): void {
+    this.chatCancelled = true;
+  }
 
   // ── Send ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +118,7 @@ export class ChatPanel {
     const quoted  = this.quotedContext();
     if (!text || this.isStreaming() || this.rateLimitUntil() !== null) return;
 
+    this.chatCancelled = false;
     this.messages.update((msgs) => [...msgs, { role: 'user', text, quotedText: quoted ?? undefined }]);
     this.draft.set('');
     this.quotedContext.set(null);
@@ -142,6 +151,7 @@ export class ChatPanel {
       // batch the DOM update manually with markForCheck() after each token.
       await this.zone.runOutsideAngular(async () => {
         for await (const token of this.aiService.chat(history, context, this.documentId())) {
+          if (this.chatCancelled) break;
           fullResponse += token;
 
           // Re-enter the zone only for the signal write so OnPush picks it up.
@@ -158,7 +168,8 @@ export class ChatPanel {
         }
       });
 
-      // Streaming finished — parse into readable display + extracted Typst.
+      // Streaming finished (or cancelled) — parse whatever was received into
+      // readable display + extracted Typst so the partial response is usable.
       const { displayText, typstCode } = parseResponse(fullResponse);
       this.messages.update((msgs) => {
         const updated = [...msgs];

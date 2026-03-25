@@ -141,6 +141,12 @@ export class EditorPage implements OnInit, OnDestroy {
   private yjsProvider: SupabaseYjsProvider | null = null;
   private collaboratorWatchChannel: RealtimeChannel | null = null;
 
+  /** Set to true in ngOnDestroy — guards async operations that create object URLs. */
+  private pageDestroyed = false;
+
+  /** Set to true when the user cancels an in-flight inline AI generation. */
+  private inlineStreamCancelled = false;
+
   /** Reference to the EditorPanel child — used to call `setContent()` in solo mode. */
   private readonly editorPanel  = viewChild(EditorPanel);
 
@@ -348,6 +354,7 @@ export class EditorPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.pageDestroyed = true;
     if (this.compileTimer   !== null) clearTimeout(this.compileTimer);
     if (this.autoSaveTimer  !== null) clearTimeout(this.autoSaveTimer);
     if (this.thumbnailTimer !== null) clearTimeout(this.thumbnailTimer);
@@ -630,6 +637,8 @@ export class EditorPage implements OnInit, OnDestroy {
     const editor = this.editorPanel();
     if (!editor) return;
 
+    this.inlineStreamCancelled = false;
+
     const MAX_CONTEXT_CHARS = 1_500;
     const context = this.content()
       .split('\n').slice(0, 40).join('\n')
@@ -650,17 +659,26 @@ export class EditorPage implements OnInit, OnDestroy {
           this.documentId,
           systemPrompt,
         )) {
+          if (this.inlineStreamCancelled) break;
           raw += token;
         }
       });
+
+      if (this.inlineStreamCancelled) return;
 
       const cleaned = stripInlineCodeFences(raw);
       this.zone.run(() => editor.streamToken(cleaned));
       editor.finishStream();
     } catch {
+      if (this.inlineStreamCancelled) return;
       editor.discardInlineInsert();
       this.toast.error('Error al generar contenido. Inténtalo de nuevo.');
     }
+  }
+
+  /** Handles the cancel button pressed during inline AI streaming. */
+  onCancelInlineStream(): void {
+    this.inlineStreamCancelled = true;
   }
 
   /**
@@ -780,7 +798,7 @@ export class EditorPage implements OnInit, OnDestroy {
 
   private async loadProjectImages(): Promise<void> {
     const images = await this.assetService.loadImages(this.documentId);
-    if (!images.length) return;
+    if (!images.length || this.pageDestroyed) return;
 
     for (const img of images) {
       const previewUrl = URL.createObjectURL(new Blob([img.data.buffer as ArrayBuffer]));

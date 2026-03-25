@@ -18,7 +18,7 @@ import { EditorView, basicSetup } from 'codemirror';
 import { keymap, placeholder } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { yCollab } from 'y-codemirror.next';
-import { LucideAngularModule, Sparkles } from 'lucide-angular';
+import { LucideAngularModule, Sparkles, X } from 'lucide-angular';
 import { typst } from '../../typst-language';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
@@ -85,7 +85,11 @@ export class EditorPanel implements OnDestroy {
    */
   aiInlineCommand = output<{ prompt: string; cursorPos: number }>();
 
+  /** Emitted when the user cancels the streaming generation mid-flight. */
+  cancelInlineStream = output<void>();
+
   protected readonly Sparkles = Sparkles;
+  protected readonly X        = X;
 
   /** Position and text of the active selection popup. null = no selection. */
   readonly selectionPopup = signal<{ top: number; left: number; text: string } | null>(null);
@@ -316,6 +320,20 @@ export class EditorPanel implements OnDestroy {
     this.inlineCmd.set(null);
     this.inlineDraft.set('');
     this.inlineInsertStart = -1;
+    this.view?.focus();
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Called when the user clicks the cancel button during streaming.
+   * Notifies EditorPage to abort the in-flight AI request, then resets state.
+   */
+  cancelStreaming(): void {
+    this.cancelInlineStream.emit();
+    this.inlineCmd.set(null);
+    this.inlineDraft.set('');
+    this.inlineInsertStart = -1;
+    this.inlineInsertLen   = 0;
     this.view?.focus();
     this.cdr.markForCheck();
   }

@@ -24,6 +24,15 @@ export interface ProfileResult {
   avatar_url:  string | null;
 }
 
+/** Shape returned by the `get_document_collaborators` RPC. */
+interface CollaboratorRpcRow {
+  user_id:    string;
+  role:       string;
+  full_name:  string | null;
+  email:      string | null;
+  avatar_url: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -73,7 +82,7 @@ export class CollaborationService {
 
     if (!error && data) {
       this._collaborators.set(
-        (data as any[]).map((row) => ({
+        (data as CollaboratorRpcRow[]).map((row) => ({
           userId:      row.user_id,
           role:        row.role as CollaboratorRole,
           displayName: row.full_name  ?? 'Usuario',

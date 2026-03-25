@@ -26,6 +26,15 @@ function colorFromId(id: string): string {
 const PERSIST_INTERVAL_MS = 30_000;
 
 /**
+ * Converts a broadcast payload value to a Uint8Array.
+ * Returns null if the value is not a non-empty array, avoiding unsafe casts.
+ */
+function toUint8Array(value: unknown): Uint8Array | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  return new Uint8Array(value as number[]);
+}
+
+/**
  * Custom Yjs provider that uses Supabase Realtime Broadcast as transport.
  *
  * Usage:
@@ -72,7 +81,8 @@ export class SupabaseYjsProvider {
 
     if (data?.yjs_state) {
       try {
-        Y.applyUpdate(this.ydoc, new Uint8Array(data.yjs_state as number[]));
+        const state = toUint8Array(data.yjs_state);
+        if (state) Y.applyUpdate(this.ydoc, state);
       } catch {
         // Corrupt or incompatible state — starting fresh.
       }
@@ -87,15 +97,13 @@ export class SupabaseYjsProvider {
       this.channel!
         .on('broadcast', { event: 'yjs-update' }, ({ payload }) => {
           if (this.destroyed) return;
-          Y.applyUpdate(this.ydoc, new Uint8Array(payload.update as number[]), this);
+          const update = toUint8Array(payload['update']);
+          if (update) Y.applyUpdate(this.ydoc, update, this);
         })
         .on('broadcast', { event: 'awareness' }, ({ payload }) => {
           if (this.destroyed) return;
-          applyAwarenessUpdate(
-            this.awareness,
-            new Uint8Array(payload.update as number[]),
-            this,
-          );
+          const update = toUint8Array(payload['update']);
+          if (update) applyAwarenessUpdate(this.awareness, update, this);
           this.notifyPresence();
         })
         .subscribe((status, err) => {
@@ -104,6 +112,10 @@ export class SupabaseYjsProvider {
             this.broadcastAwareness([this.ydoc.clientID]);
             resolve();
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            // Clean up the channel before rejecting so the subscription is
+            // not left dangling if the caller doesn't call destroy().
+            void this.supabase.removeChannel(this.channel!);
+            this.channel = null;
             reject(new Error(`Realtime channel failed: ${status}`));
           }
         });

@@ -177,14 +177,26 @@
       (input)="updateDraft($event)"
       (keydown)="onKeydown($event)"
     ></textarea>
-    <app-button
-      size="sm"
-      [icon]="ArrowUp"
-      [disabled]="draft().trim().length === 0 || isStreaming() || rateLimitUntil() !== null"
-      [loading]="isStreaming()"
-      (click)="send()"
-      aria-label="Enviar mensaje"
-    ></app-button>
+    @if (isStreaming()) {
+      <button
+        type="button"
+        class="flex items-center justify-center w-7 h-7 rounded-lg shrink-0
+               bg-brand text-white hover:bg-brand/90 transition-colors"
+        aria-label="Detener generación"
+        title="Detener"
+        (click)="cancelStreaming()"
+      >
+        <lucide-icon [img]="Square" class="w-3.5 h-3.5" aria-hidden="true" />
+      </button>
+    } @else {
+      <app-button
+        size="sm"
+        [icon]="ArrowUp"
+        [disabled]="draft().trim().length === 0 || rateLimitUntil() !== null"
+        (click)="send()"
+        aria-label="Enviar mensaje"
+      ></app-button>
+    }
   </div>
   <p class="text-[10px] text-muted mt-1.5 text-center">
     Shift + Enter para nueva línea · {{ aiService.requestsRemaining }} peticiones restantes

@@ -54,11 +54,22 @@
         <lucide-icon [img]="Sparkles" class="w-3.5 h-3.5 text-brand shrink-0 animate-pulse"
                      aria-hidden="true" />
         <span class="text-sm text-muted flex-1">Generando…</span>
-        <span class="flex gap-0.5">
+        <span class="flex gap-0.5 mr-1">
           <span class="w-1.5 h-1.5 rounded-full bg-brand animate-bounce"></span>
           <span class="w-1.5 h-1.5 rounded-full bg-brand animate-bounce [animation-delay:100ms]"></span>
           <span class="w-1.5 h-1.5 rounded-full bg-brand animate-bounce [animation-delay:200ms]"></span>
         </span>
+        <button
+          type="button"
+          aria-label="Cancelar generación"
+          title="Cancelar"
+          class="flex items-center justify-center w-5 h-5 rounded text-muted
+                 hover:text-red-400 hover:bg-surface-hover transition-colors shrink-0"
+          (mousedown)="$event.preventDefault()"
+          (click)="cancelStreaming()"
+        >
+          <lucide-icon [img]="X" class="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
       </div>
     }
 

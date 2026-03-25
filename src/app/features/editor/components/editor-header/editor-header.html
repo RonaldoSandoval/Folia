@@ -32,10 +32,22 @@
 
     <div class="w-px h-5 bg-border shrink-0"></div>
 
-    <!-- Title + compile indicator -->
-    <span class="text-sm font-medium text-foreground truncate max-w-[20ch] leading-none">
+    <!-- Title + unsaved dot + compile indicator -->
+    <span
+      class="text-sm font-medium text-foreground truncate max-w-[20ch] leading-none"
+      [title]="documentTitle()"
+    >
       {{ documentTitle() }}
     </span>
+
+    @if (saveStatus() !== 'guardado') {
+      <span
+        class="w-2 h-2 rounded-full shrink-0 transition-colors"
+        [class]="saveStatus() === 'guardando' ? 'bg-brand animate-pulse' : 'bg-amber-400'"
+        [title]="saveStatus() === 'guardando' ? 'Guardando…' : 'Cambios sin guardar'"
+        aria-hidden="true"
+      ></span>
+    }
 
     @if (compiling()) {
       <span class="flex items-center gap-1 shrink-0" aria-label="Compilando">
@@ -62,13 +74,6 @@
         <lucide-icon [img]="Download" class="w-4 h-4" aria-hidden="true" />
       </button>
     </app-dropdown>
-
-    <!-- Save status label -->
-    @if (saveStatus() !== 'guardado') {
-      <span class="text-xs text-muted shrink-0">
-        {{ saveStatus() === 'guardando' ? 'Guardando...' : 'Sin guardar' }}
-      </span>
-    }
 
     <!-- Save -->
     <app-button
