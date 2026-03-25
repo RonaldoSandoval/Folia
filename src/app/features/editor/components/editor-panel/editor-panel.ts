@@ -16,6 +16,7 @@ import {
 import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, basicSetup } from 'codemirror';
 import { keymap, placeholder } from '@codemirror/view';
+import { search } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { yCollab } from 'y-codemirror.next';
 import { LucideAngularModule, Sparkles, X } from 'lucide-angular';
@@ -23,6 +24,7 @@ import { typst } from '../../typst-language';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 import { ThemeService } from '../../../../core/service/theme/theme-service';
+import { SearchPanel } from '../search-panel/search-panel';
 
 
 export interface YjsBinding {
@@ -51,7 +53,7 @@ interface InlineCmd {
  */
 @Component({
   selector: 'app-editor-panel',
-  imports: [LucideAngularModule],
+  imports: [LucideAngularModule, SearchPanel],
   templateUrl: './editor-panel.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block h-full w-full relative' },
@@ -91,6 +93,15 @@ export class EditorPanel implements OnDestroy {
   protected readonly Sparkles = Sparkles;
   protected readonly X        = X;
 
+  /** Controls visibility of the custom search/replace panel. */
+  protected readonly searchOpen = signal(false);
+  /** Whether the search panel is in find-only or find+replace mode. */
+  protected readonly searchMode = signal<'find' | 'replace'>('find');
+  /** Exposes the live EditorView to the SearchPanel child. */
+  protected readonly viewSignal = signal<EditorView | null>(null);
+
+  private readonly searchPanelRef = viewChild(SearchPanel);
+
   /** Position and text of the active selection popup. null = no selection. */
   readonly selectionPopup = signal<{ top: number; left: number; text: string } | null>(null);
 
@@ -119,7 +130,20 @@ export class EditorPanel implements OnDestroy {
     '&':           { height: '100%', fontSize: '13px' },
     '.cm-content':  { fontFamily: '"JetBrains Mono", "Fira Code", monospace' },
     '.cm-scroller': { overflow: 'auto' },
+    // Hide the native panel slot (we use our own Angular overlay).
+    '.cm-panels':   { display: 'none' },
+  });
 
+  /** Match highlight styles for CodeMirror's search state field. */
+  private readonly searchTheme = EditorView.theme({
+    '.cm-searchMatch': {
+      backgroundColor: 'color-mix(in srgb, var(--typs-brand) 25%, transparent)',
+      borderRadius:    '2px',
+    },
+    '.cm-searchMatch.cm-searchMatch-selected': {
+      backgroundColor: 'color-mix(in srgb, var(--typs-brand) 50%, transparent)',
+      outline:         '1px solid var(--typs-brand)',
+    },
   });
 
 
@@ -145,6 +169,7 @@ export class EditorPanel implements OnDestroy {
         parent: this.host().nativeElement,
       });
       this.pendingContent = null;
+      this.viewSignal.set(this.view);
     });
 
     // Hot-swap theme without recreating the view.
@@ -175,6 +200,7 @@ export class EditorPanel implements OnDestroy {
           extensions: this.buildExtensions(this.themeService.isDark(), binding),
         }),
       );
+      this.viewSignal.set(this.view);
     });
   }
 
@@ -338,6 +364,31 @@ export class EditorPanel implements OnDestroy {
     this.cdr.markForCheck();
   }
 
+  // ── Search panel ──────────────────────────────────────────────────────────
+
+  /** Opens the custom search panel in the given mode. Pre-fills with selection if any. */
+  private openSearch(mode: 'find' | 'replace'): void {
+    this.searchMode.set(mode);
+    this.searchOpen.set(true);
+    this.cdr.markForCheck();
+
+    // Pre-fill with selected text on next tick (panel needs to render first).
+    setTimeout(() => {
+      const panel = this.searchPanelRef();
+      if (!panel || !this.view) return;
+      const { from, to } = this.view.state.selection.main;
+      if (from !== to) {
+        panel.prefillSearch(this.view.state.sliceDoc(from, to));
+      }
+    });
+  }
+
+  protected closeSearch(): void {
+    this.searchOpen.set(false);
+    this.view?.focus();
+    this.cdr.markForCheck();
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /**
@@ -369,6 +420,18 @@ export class EditorPanel implements OnDestroy {
     const { from, to } = this.view.state.selection.main;
     if (from === to) return '';
     return this.view.state.sliceDoc(from, to);
+  }
+
+  /**
+   * Moves the cursor to the given 1-based line number and scrolls it into view.
+   * Used by the outline panel to navigate to a heading.
+   */
+  scrollToLine(line: number): void {
+    if (!this.view) return;
+    const clamped = Math.max(1, Math.min(line, this.view.state.doc.lines));
+    const pos     = this.view.state.doc.line(clamped).from;
+    this.view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    this.view.focus();
   }
 
   /** Replaces the editor content (solo mode only). No-op in collaborative mode. */
@@ -419,22 +482,47 @@ export class EditorPanel implements OnDestroy {
     });
 
     // Ctrl+K (Cmd+K on Mac) opens the inline AI command overlay.
-    const inlineCommandKeymap = keymap.of([{
-      key: 'Mod-k',
-      run: (v: EditorView) => {
-        this.zone.run(() => this.activateInlineCommand(v));
-        return true;
+    // Ctrl+F opens the custom find panel.
+    // Ctrl+H opens the custom find+replace panel.
+    const inlineCommandKeymap = keymap.of([
+      {
+        key: 'Mod-k',
+        run: (v: EditorView) => {
+          this.zone.run(() => this.activateInlineCommand(v));
+          return true;
+        },
       },
-    }]);
+      {
+        key: 'Mod-f',
+        run: () => {
+          this.zone.run(() => this.openSearch('find'));
+          return true;
+        },
+      },
+      {
+        key: 'Mod-h',
+        run: () => {
+          this.zone.run(() => this.openSearch('replace'));
+          return true;
+        },
+      },
+    ]);
 
     const base = [
+      // Custom keymap MUST come before basicSetup so Mod-f/Mod-h/Mod-k take
+      // precedence over the default searchKeymap bundled in basicSetup.
+      inlineCommandKeymap,
       basicSetup,
+      // Suppress native search panel; match highlighting still works.
+      // We return a zero-height hidden element so CodeMirror's panel slot
+      // takes no space while the search state field stays active.
+      search({ createPanel: () => ({ dom: document.createElement('div') }) }),
       typst(),
       this.themeCompartment.of(isDark ? oneDark : this.lightTheme),
       this.structuralTheme,
+      this.searchTheme,
       this.readonlyCompartment.of(EditorView.editable.of(!this.readonly())),
       selectionListener,
-      inlineCommandKeymap,
       placeholder('Empieza a escribir o presiona Ctrl+K para generar con IA…'),
     ];
 

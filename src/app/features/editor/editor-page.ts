@@ -12,6 +12,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { createTypstRenderer } from '@myriaddreamin/typst.ts';
 import { withGlobalRenderer } from '@myriaddreamin/typst.ts/contrib/global-renderer';
@@ -33,6 +34,7 @@ import { FilesSidebar, type ImageFile } from './components/files-sidebar/files-s
 import { PreviewPanel } from './components/preview-panel/preview-panel';
 import { SharingPanel } from './components/sharing-panel/sharing-panel';
 import { Spinner } from '../../shared/components/spinner/spinner';
+import { OutlinePanel, type OutlineHeading } from './components/outline-panel/outline-panel';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 const RENDERER_OPTIONS = {
@@ -48,6 +50,40 @@ const MAX_EDITOR_PCT = 80;
 const COMPILE_DEBOUNCE_MS = 80;
 
 /**
+ * Extracts the heading numbering format from `#set heading(numbering: "...")`.
+ * Returns null when no numbering is configured.
+ */
+function detectHeadingNumbering(source: string): string | null {
+  const match = source.match(/#set\s+heading[^]*?numbering:\s*"([^"]+)"/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Formats a heading number from level counters and a Typst numbering format string.
+ *
+ * The format string is split by '1' to extract prefix, inter-level separator,
+ * and suffix. Examples:
+ *   "1."  counters=[2]   → "2."
+ *   "1."  counters=[1,3] → "1.3."
+ *   "1.1" counters=[1,3] → "1.3"
+ */
+function formatHeadingNumber(counters: number[], format: string): string {
+  const parts   = format.split('1');
+  const prefix  = parts[0];
+  const suffix  = parts[parts.length - 1];
+  // When format has multiple '1's (e.g. "1.1"), use the char between them as
+  // inter-level separator; otherwise fall back to the suffix (e.g. "1." → ".").
+  const interSep = parts.length > 2 ? parts[1] : suffix;
+
+  let result = prefix;
+  for (let i = 0; i < counters.length; i++) {
+    result += counters[i];
+    if (i < counters.length - 1) result += interSep;
+  }
+  return result + suffix;
+}
+
+/**
  * Full-screen project editor page.
  *
  * Supports two modes:
@@ -58,8 +94,10 @@ const COMPILE_DEBOUNCE_MS = 80;
 @Component({
   selector: 'app-editor-page',
   imports: [
+    DecimalPipe,
     EditorHeader,
     FilesSidebar,
+    OutlinePanel,
     EditorPanel,
     PreviewPanel,
     ChatPanel,
@@ -102,6 +140,9 @@ export class EditorPage implements OnInit, OnDestroy {
   readonly chatOpen    = signal(false);
   readonly sharingOpen = signal(false);
 
+  /** Active tab in the left sidebar: file tree or document outline. */
+  readonly sidebarTab = signal<'files' | 'outline'>('files');
+
   // ── Editor content ─────────────────────────────────────────────────────────
 
   readonly isLoadingDocument = signal(true);
@@ -123,6 +164,59 @@ export class EditorPage implements OnInit, OnDestroy {
   readonly activeFile    = signal('main.typ');
 
   readonly imageFiles = signal<(ImageFile & { data: Uint8Array })[]>([]);
+
+  // ── Document outline ───────────────────────────────────────────────────────
+
+  /** Headings extracted from the Typst source for the outline panel. */
+  readonly outlineHeadings = computed<OutlineHeading[]>(() => {
+    const source   = this.content();
+    const lines    = source.split('\n');
+    const format   = detectHeadingNumbering(source);
+    const counters: number[] = [];
+    const results: OutlineHeading[] = [];
+
+    lines.forEach((line, i) => {
+      const match = line.match(/^\s*(=+)\s+(.+)$/);
+      if (!match) return;
+
+      const level = match[1].length;
+      const text  = match[2].trim();
+
+      let number: string | undefined;
+      if (format) {
+        while (counters.length < level) counters.push(0);
+        counters[level - 1]++;
+        for (let j = level; j < counters.length; j++) counters[j] = 0;
+        number = formatHeadingNumber(counters.slice(0, level), format);
+      }
+
+      results.push({ level, text, line: i + 1, number });
+    });
+
+    return results;
+  });
+
+  onHeadingClick(heading: OutlineHeading): void {
+    this.editorPanel()?.scrollToLine(heading.line);
+
+    const totalLines = this.content().split('\n').length;
+    const pages      = this.pageCount();
+    if (pages > 0 && totalLines > 0) {
+      const estimated = Math.max(1, Math.round((heading.line / totalLines) * pages));
+      this.previewPanel()?.scrollToPage(estimated);
+    }
+  }
+
+  // ── Document statistics ────────────────────────────────────────────────────
+
+  readonly wordCount = computed(() => {
+    const text = this.content().trim();
+    return text ? text.split(/\s+/).length : 0;
+  });
+
+  readonly charCount = computed(() => this.content().length);
+
+  readonly pageCount = computed(() => this.previewPanel()?.pageCount() ?? 0);
 
   // ── Collaboration state ────────────────────────────────────────────────────
 

@@ -25,21 +25,58 @@
     <!-- ① Files sidebar -->
     @if (filesOpen()) {
       <aside class="flex flex-col w-52 shrink-0 border-r border-border bg-surface overflow-hidden">
-        <app-files-sidebar
-          [files]="projectFiles()"
-          [activeFile]="activeFile()"
-          [imageFiles]="imageFiles()"
-          (fileSelect)="onFileSelect($event)"
-          (fileCreate)="onFileCreate($event)"
-          (fileRename)="onFileRename($event)"
-          (fileDelete)="onFileDelete($event)"
-          (folderCreate)="onFolderCreate($event)"
-          (folderRename)="onFolderRename($event)"
-          (folderDelete)="onFolderDelete($event)"
-          (imageUpload)="onImageUpload($event)"
-          (imageRename)="onImageRename($event)"
-          (imageDelete)="onImageDelete($event)"
-        />
+
+        <!-- Tab bar -->
+        <div class="flex items-center border-b border-border shrink-0 h-8 px-1 gap-0.5">
+          <button
+            type="button"
+            class="flex-1 flex items-center justify-center gap-1 h-6 rounded text-[11px]
+                   font-medium transition-colors"
+            [class]="sidebarTab() === 'files'
+              ? 'bg-brand-subtle text-brand-text'
+              : 'text-muted hover:text-foreground hover:bg-surface-hover'"
+            (click)="sidebarTab.set('files')"
+            title="Archivos"
+          >
+            Archivos
+          </button>
+          <button
+            type="button"
+            class="flex-1 flex items-center justify-center gap-1 h-6 rounded text-[11px]
+                   font-medium transition-colors"
+            [class]="sidebarTab() === 'outline'
+              ? 'bg-brand-subtle text-brand-text'
+              : 'text-muted hover:text-foreground hover:bg-surface-hover'"
+            (click)="sidebarTab.set('outline')"
+            title="Estructura del documento"
+          >
+            Estructura
+          </button>
+        </div>
+
+        @if (sidebarTab() === 'files') {
+          <app-files-sidebar
+            [files]="projectFiles()"
+            [activeFile]="activeFile()"
+            [imageFiles]="imageFiles()"
+            (fileSelect)="onFileSelect($event)"
+            (fileCreate)="onFileCreate($event)"
+            (fileRename)="onFileRename($event)"
+            (fileDelete)="onFileDelete($event)"
+            (folderCreate)="onFolderCreate($event)"
+            (folderRename)="onFolderRename($event)"
+            (folderDelete)="onFolderDelete($event)"
+            (imageUpload)="onImageUpload($event)"
+            (imageRename)="onImageRename($event)"
+            (imageDelete)="onImageDelete($event)"
+          />
+        } @else {
+          <app-outline-panel
+            [headings]="outlineHeadings()"
+            (headingClick)="onHeadingClick($event)"
+          />
+        }
+
       </aside>
     }
 
@@ -90,6 +127,24 @@
             (aiInlineCommand)="onAiInlineCommand($event)"
             (cancelInlineStream)="onCancelInlineStream()"
           />
+        </div>
+
+        <!-- Stats bar -->
+        <div class="flex items-center gap-3 h-5 px-3 border-t border-divider bg-surface
+                    shrink-0 select-none">
+          <span class="text-[10px] text-muted">
+            {{ wordCount() | number }} palabras
+          </span>
+          <span class="text-[10px] text-muted/40">·</span>
+          <span class="text-[10px] text-muted">
+            {{ charCount() | number }} caracteres
+          </span>
+          @if (pageCount() > 0) {
+            <span class="text-[10px] text-muted/40">·</span>
+            <span class="text-[10px] text-muted">
+              {{ pageCount() }} {{ pageCount() === 1 ? 'página' : 'páginas' }}
+            </span>
+          }
         </div>
       </div>
 

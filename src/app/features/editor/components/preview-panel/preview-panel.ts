@@ -137,6 +137,11 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
     if (this.presentationActive()) document.body.style.overflow = '';
   }
 
+  // ── Page count ─────────────────────────────────────────────────────────────
+
+  /** Number of pages in the last successful render. 0 = not yet compiled. */
+  readonly pageCount = signal(0);
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   private render(vectorData: Uint8Array): void {
@@ -152,6 +157,7 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
           container:       el,
           pixelPerPt:      3,
         });
+        this.pageCount.set(el.querySelectorAll('.typst-page').length);
       },
       () => {},
     );
@@ -201,6 +207,18 @@ export class PreviewPanel implements AfterViewInit, OnDestroy {
 
     // JPEG at 0.75 quality — sharp enough for card previews (~20–50 KB as base64).
     return new Promise((resolve) => out.toBlob(resolve, 'image/jpeg', 0.75));
+  }
+
+  /**
+   * Scrolls the preview to the given 1-based page number.
+   * Uses a proportional estimate: the nth `.typst-page` element is scrolled into view.
+   */
+  scrollToPage(page: number): void {
+    const scroll = this.scrollArea()?.nativeElement;
+    if (!scroll) return;
+    const pages  = scroll.querySelectorAll('.typst-page');
+    const target = pages[Math.max(0, page - 1)] as HTMLElement | undefined;
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   protected fitWidth(): void {

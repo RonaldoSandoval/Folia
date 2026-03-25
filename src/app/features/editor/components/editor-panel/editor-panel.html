@@ -1,5 +1,14 @@
 <div #host class="h-full w-full overflow-hidden"></div>
 
+<!-- ── Custom search / replace panel (Ctrl+F / Ctrl+H) ───────────────────── -->
+@if (searchOpen()) {
+  <app-search-panel
+    [view]="viewSignal()"
+    [mode]="searchMode()"
+    (close)="closeSearch()"
+  />
+}
+
 <!-- Ask AI popup (appears on text selection) -->
 @if (selectionPopup()) {
   <button

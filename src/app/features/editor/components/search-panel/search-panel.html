@@ -1,0 +1,147 @@
+<!-- ══ Search row ════════════════════════════════════════════════════════════ -->
+<div class="flex items-center gap-1">
+
+  <!-- Search icon — tinted brand -->
+  <lucide-icon [img]="Search" class="w-3.5 h-3.5 text-brand/70 shrink-0 ml-0.5" aria-hidden="true" />
+
+  <!-- Search input -->
+  <input
+    #searchInput
+    type="text"
+    placeholder="Buscar…"
+    autocomplete="off"
+    spellcheck="false"
+    class="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted/50
+           outline-none min-w-0 py-0.5"
+    [value]="searchTerm"
+    (input)="onSearchInput($any($event.target).value)"
+  />
+
+  <!-- Match count badge -->
+  @if (matchCount() !== null) {
+    <span class="text-[10px] font-medium text-brand/70 shrink-0 tabular-nums">
+      {{ matchCount() }}
+    </span>
+  }
+
+  <!-- Case-sensitive toggle -->
+  <button
+    type="button"
+    title="Distinguir mayúsculas (Alt+C)"
+    class="flex items-center justify-center w-6 h-6 rounded transition-colors shrink-0"
+    [class]="caseSensitive()
+      ? 'bg-brand text-white'
+      : 'text-muted hover:text-brand hover:bg-brand/10'"
+    (click)="toggleCase()"
+  >
+    <lucide-icon [img]="CaseSensitive" class="w-3.5 h-3.5" aria-hidden="true" />
+  </button>
+
+  <!-- Regex toggle -->
+  <button
+    type="button"
+    title="Expresión regular (Alt+R)"
+    class="flex items-center justify-center w-6 h-6 rounded transition-colors shrink-0"
+    [class]="useRegex()
+      ? 'bg-brand text-white'
+      : 'text-muted hover:text-brand hover:bg-brand/10'"
+    (click)="toggleRegex()"
+  >
+    <lucide-icon [img]="Regex" class="w-3.5 h-3.5" aria-hidden="true" />
+  </button>
+
+  <!-- Divider -->
+  <span class="w-px h-4 bg-border shrink-0"></span>
+
+  <!-- Find previous -->
+  <button
+    type="button"
+    title="Anterior (Shift+Enter)"
+    class="flex items-center justify-center w-6 h-6 rounded transition-colors shrink-0
+           text-muted hover:text-brand hover:bg-brand/10
+           disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted disabled:hover:bg-transparent"
+    [disabled]="!searchTerm"
+    (click)="doFindPrev()"
+  >
+    <lucide-icon [img]="ChevronUp" class="w-3.5 h-3.5" aria-hidden="true" />
+  </button>
+
+  <!-- Find next -->
+  <button
+    type="button"
+    title="Siguiente (Enter)"
+    class="flex items-center justify-center w-6 h-6 rounded transition-colors shrink-0
+           text-muted hover:text-brand hover:bg-brand/10
+           disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted disabled:hover:bg-transparent"
+    [disabled]="!searchTerm"
+    (click)="doFindNext()"
+  >
+    <lucide-icon [img]="ChevronDown" class="w-3.5 h-3.5" aria-hidden="true" />
+  </button>
+
+  <!-- Close -->
+  <button
+    type="button"
+    title="Cerrar (Esc)"
+    class="flex items-center justify-center w-6 h-6 rounded text-muted
+           hover:text-red-400 hover:bg-red-400/10 transition-colors shrink-0"
+    (click)="close.emit()"
+  >
+    <lucide-icon [img]="X" class="w-3.5 h-3.5" aria-hidden="true" />
+  </button>
+
+</div>
+
+<!-- ══ Replace row (only in replace mode) ════════════════════════════════════ -->
+@if (mode() === 'replace') {
+
+  <!-- Separator -->
+  <div class="h-px bg-border mx-0.5"></div>
+
+  <div class="flex items-center gap-1">
+
+    <!-- Replace icon -->
+    <lucide-icon [img]="Replace" class="w-3.5 h-3.5 text-brand/70 shrink-0 ml-0.5" aria-hidden="true" />
+
+    <!-- Replace input -->
+    <input
+      type="text"
+      placeholder="Reemplazar…"
+      autocomplete="off"
+      spellcheck="false"
+      class="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted/50
+             outline-none min-w-0 py-0.5"
+      [value]="replaceTerm"
+      (input)="onReplaceInput($any($event.target).value)"
+    />
+
+    <!-- Replace next -->
+    <button
+      type="button"
+      title="Reemplazar"
+      class="px-2 py-0.5 rounded text-[11px] font-medium border border-brand
+             bg-brand text-white
+             hover:bg-brand hover:text-white hover:border-brand
+             transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+      [disabled]="!searchTerm"
+      (click)="doReplaceNext()"
+    >
+      Reemplazar
+    </button>
+
+    <!-- Replace all -->
+    <button
+      type="button"
+      title="Reemplazar todo"
+      class="px-2 py-0.5 rounded text-[11px] font-medium border border-brand
+             bg-brand text-white
+             hover:bg-brand hover:text-white hover:border-brand 
+             transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+      [disabled]="!searchTerm"
+      (click)="doReplaceAll()"
+    >
+      Todo
+    </button>
+
+  </div>
+}
