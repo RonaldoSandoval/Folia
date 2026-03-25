@@ -102,3 +102,35 @@ Always call `flushIfUnsaved()` before any file-tree mutation (`addFile`, `delete
 - `protected` on template-only methods/properties; `readonly` on icon refs and static data.
 - No `any`; prefer explicit TypeScript types.
 - Prettier config in `package.json` (`printWidth: 100`, `singleQuote: true`).
+
+## Security best practices
+
+### Secrets and environment
+- **Never commit secrets.** `src/environments/environment.ts` and `.env` are in `.gitignore` — keep them there.
+- All AI API keys go through the Supabase Edge Function in production. They must never appear in browser-reachable code.
+- If a secret is accidentally committed, rotate it immediately — do not just delete the file.
+
+### Dependencies
+- Run `npm audit` before every release. Zero high/critical vulnerabilities required to ship.
+- Keep Angular and its ecosystem (`@angular/*`, `@angular/build`, `@angular/cli`) on the latest patch release. Angular XSS fixes are released as patches — falling behind exposes real attack surface.
+- When adding a new dependency: check its npm audit score, last publish date, and weekly downloads before installing.
+- Prefer `npm ci` over `npm install` in CI/CD — it uses the lockfile exactly and fails on drift.
+- Do not use `npm audit fix --force` without reviewing the diff; it may introduce breaking changes silently.
+
+### Angular-specific XSS
+- Never use `[innerHTML]`, `bypassSecurityTrustHtml()`, or `DomSanitizer.bypassSecurityTrust*()` unless strictly necessary. If you must, document why inline.
+- Do not bind untrusted user content to `[src]`, `[href]`, or SVG attributes directly.
+- `strictTemplates: true` is enforced in `tsconfig.json` — do not disable it.
+
+### HTTP and API calls
+- All Supabase calls are authenticated via the session token managed by `@supabase/supabase-js` — never pass keys manually in request headers from the frontend.
+- Validate and sanitize all user-supplied data before sending to Supabase (use TypeScript types + RLS policies as the last line of defense).
+- Do not expose Supabase service-role keys anywhere in the frontend codebase.
+
+### Content Security (browser headers)
+- `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` are required for SharedArrayBuffer (Typst WASM). These headers must be set on the production server/CDN — they are currently only set on the dev server in `angular.json`.
+- When deploying, configure these headers at the infrastructure level (Vercel `vercel.json`, Nginx, etc.).
+
+### Scripts
+- `scripts/download-fonts.mjs` fetches files from a CDN without hash verification. Run it only during local setup or controlled CI steps — never in an automated pipeline triggered by external events.
+- Do not add `postinstall` scripts to `package.json` that fetch remote resources.

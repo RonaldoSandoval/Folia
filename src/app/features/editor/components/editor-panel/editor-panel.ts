@@ -13,9 +13,11 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Compartment, EditorState, StateEffect, StateField, RangeSetBuilder, Text } from '@codemirror/state';
+import { Compartment, EditorState, Text } from '@codemirror/state';
 import { EditorView, basicSetup } from 'codemirror';
-import { keymap, placeholder, GutterMarker, gutter, ViewPlugin, ViewUpdate, Decoration, DecorationSet } from '@codemirror/view';
+import { keymap, placeholder } from '@codemirror/view';
+import { setDiagnostics, lintGutter, lintKeymap } from '@codemirror/lint';
+import type { Diagnostic } from '@codemirror/lint';
 import type { DiagnosticMessage } from '../../../../core/service/compiler/compiler-service';
 import { search } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -29,22 +31,8 @@ import { SearchPanel } from '../search-panel/search-panel';
 
 
 // ---------------------------------------------------------------------------
-// Diagnostics — module-level so extensions are shared across instances
+// Diagnostics
 // ---------------------------------------------------------------------------
-
-/** Effect that pushes a new diagnostics array into the editor state. */
-const setDiagnosticsEffect = StateEffect.define<DiagnosticMessage[]>();
-
-/** State field that stores the current list of diagnostics. */
-const diagnosticsField = StateField.define<DiagnosticMessage[]>({
-  create: () => [],
-  update(value, tr) {
-    for (const e of tr.effects) {
-      if (e.is(setDiagnosticsEffect)) return e.value;
-    }
-    return value;
-  },
-});
 
 /** Parses "startLine:startCol-endLine:endCol" into document offsets (1-based lines, 0-based cols). */
 function parseDiagRange(doc: Text, range: string): { from: number; to: number } | null {
@@ -60,69 +48,23 @@ function parseDiagRange(doc: Text, range: string): { from: number; to: number } 
   }
 }
 
-class DiagGutterMarker extends GutterMarker {
-  constructor(private readonly sev: string) { super(); }
-  override toDOM(): HTMLElement {
-    const el = document.createElement('span');
-    el.className = this.sev === 'error' ? 'cm-diag-gutter-error' : 'cm-diag-gutter-warning';
-    return el;
+/** Converts DiagnosticMessage[] from the Typst compiler to @codemirror/lint Diagnostic[].
+ *  Filters out diagnostics from external packages (they point to unreachable code). */
+function toLintDiagnostics(doc: Text, diags: DiagnosticMessage[]): Diagnostic[] {
+  const result: Diagnostic[] = [];
+  for (const d of diags) {
+    if (!d.range || d.package) continue;
+    const parsed = parseDiagRange(doc, d.range);
+    if (!parsed) continue;
+    result.push({
+      from:     parsed.from,
+      to:       parsed.to,
+      severity: d.severity === 'error' ? 'error' : 'warning',
+      message:  d.message,
+    });
   }
+  return result;
 }
-
-const diagnosticGutter = gutter({
-  class: 'cm-diag-gutter',
-  markers(view) {
-    const diags = view.state.field(diagnosticsField);
-    const lineMap = new Map<number, string>(); // line → worst severity
-    for (const d of diags) {
-      if (!d.range || d.package) continue;
-      const m = /^(\d+)/.exec(d.range);
-      if (!m) continue;
-      const ln = +m[1];
-      if (!lineMap.has(ln) || d.severity === 'error') lineMap.set(ln, d.severity);
-    }
-    const builder = new RangeSetBuilder<GutterMarker>();
-    for (const [ln, sev] of [...lineMap.entries()].sort((a, b) => a[0] - b[0])) {
-      try {
-        const pos = view.state.doc.line(ln).from;
-        builder.add(pos, pos, new DiagGutterMarker(sev));
-      } catch { /* line out of bounds */ }
-    }
-    return builder.finish();
-  },
-});
-
-const diagnosticUnderlines = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) { this.decorations = this.build(view); }
-    update(update: ViewUpdate) {
-      if (
-        update.docChanged ||
-        update.state.field(diagnosticsField) !== update.startState.field(diagnosticsField)
-      ) {
-        this.decorations = this.build(update.view);
-      }
-    }
-    build(view: EditorView): DecorationSet {
-      const diags = view.state.field(diagnosticsField);
-      const ranges: { from: number; to: number; cls: string }[] = [];
-      for (const d of diags) {
-        if (!d.range || d.package) continue;
-        const parsed = parseDiagRange(view.state.doc, d.range);
-        if (!parsed) continue;
-        ranges.push({ ...parsed, cls: d.severity === 'error' ? 'cm-diag-error' : 'cm-diag-warning' });
-      }
-      ranges.sort((a, b) => a.from - b.from);
-      const builder = new RangeSetBuilder<Decoration>();
-      for (const { from, to, cls } of ranges) {
-        builder.add(from, to, Decoration.mark({ class: cls }));
-      }
-      return builder.finish();
-    }
-  },
-  { decorations: (v) => v.decorations },
-);
 
 // ---------------------------------------------------------------------------
 
@@ -286,17 +228,18 @@ export class EditorPanel implements OnDestroy {
 
 
   private readonly diagnosticTheme = EditorView.theme({
-    '.cm-diag-error':   { textDecoration: 'underline wavy #ef4444', textUnderlineOffset: '3px' },
-    '.cm-diag-warning': { textDecoration: 'underline wavy #f59e0b', textUnderlineOffset: '3px' },
-    '.cm-diag-gutter':  { width: '8px' },
-    '.cm-diag-gutter-error': {
-      display: 'inline-block', width: '6px', height: '6px',
-      borderRadius: '50%', backgroundColor: '#ef4444', marginLeft: '1px',
-    },
-    '.cm-diag-gutter-warning': {
-      display: 'inline-block', width: '6px', height: '6px',
-      borderRadius: '50%', backgroundColor: '#f59e0b', marginLeft: '1px',
-    },
+    // Wavy underlines for lint ranges
+    '.cm-lintRange-error':   { textDecoration: 'underline wavy #ef4444', textUnderlineOffset: '3px', backgroundImage: 'none' },
+    '.cm-lintRange-warning': { textDecoration: 'underline wavy #f59e0b', textUnderlineOffset: '3px', backgroundImage: 'none' },
+    // Gutter column width
+    '.cm-gutter-lint': { width: '8px' },
+    // Replace SVG icon with a colored dot
+    '.cm-lint-marker svg':         { display: 'none' },
+    '.cm-lint-marker':             { display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', marginLeft: '1px' },
+    '.cm-lint-marker-error':       { backgroundColor: '#ef4444' },
+    '.cm-lint-marker-warning':     { backgroundColor: '#f59e0b' },
+    // Tooltip
+    '.cm-tooltip.cm-tooltip-lint': { border: 'none', borderRadius: '6px', fontSize: '12px' },
   });
 
   private readonly lightTheme = EditorView.theme({
@@ -346,7 +289,7 @@ export class EditorPanel implements OnDestroy {
     effect(() => {
       const diags = this.diagnostics();
       if (!this.view) return;
-      this.view.dispatch({ effects: setDiagnosticsEffect.of(diags) });
+      this.view.dispatch(setDiagnostics(this.view.state, toLintDiagnostics(this.view.state.doc, diags)));
     });
 
     // React to yjsBinding arriving after the view was already created.
@@ -684,6 +627,7 @@ export class EditorPanel implements OnDestroy {
       // Custom keymap MUST come before basicSetup so Mod-f/Mod-h/Mod-k take
       // precedence over the default searchKeymap bundled in basicSetup.
       inlineCommandKeymap,
+      keymap.of(lintKeymap),
       basicSetup,
       // Suppress native search panel; match highlighting still works.
       // We return a zero-height hidden element so CodeMirror's panel slot
@@ -695,9 +639,7 @@ export class EditorPanel implements OnDestroy {
       this.collaboratorCursorTheme,
       this.searchTheme,
       this.diagnosticTheme,
-      diagnosticsField,
-      diagnosticGutter,
-      diagnosticUnderlines,
+      lintGutter(),
       this.readonlyCompartment.of(EditorView.editable.of(!this.readonly())),
       selectionListener,
       placeholder('Empieza a escribir o presiona Ctrl+K para generar con IA…'),
