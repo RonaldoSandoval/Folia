@@ -149,6 +149,57 @@ The `viewer` role is enforced by setting CodeMirror to `readonly: true` via `Edi
 
 ---
 
+## Remote Cursor Rendering
+
+When in collaborative mode, each user's cursor and selection are visible in the editor
+in real time. This is handled by `y-codemirror.next` (`yCollab` extension), which reads
+the Yjs Awareness state and injects CodeMirror decorations for remote cursors.
+
+### Why cursors were invisible by default
+
+`yCollab` ships with a `baseTheme` that sets `.cm-ySelectionInfo { opacity: 0 }` —
+the cursor label is hidden and only shows on hover. This is a conservative default
+(Notion, Linear, etc. also hide labels until hover), but for a document editor it is
+more useful to always see who is where.
+
+### Solution: `collaboratorCursorTheme`
+
+`EditorPanel` defines a `collaboratorCursorTheme` using `EditorView.theme()` that
+**overrides** the `baseTheme` defaults:
+
+```typescript
+'.cm-ySelectionInfo': {
+  opacity: '1',       // always visible
+  fontFamily: '"Inter", system-ui, sans-serif',
+  fontSize:   '.68em',
+  fontWeight: '600',
+  // ...
+},
+```
+
+`EditorView.theme()` generates a CSS rule with a higher specificity than `baseTheme`,
+so it wins without needing `!important`.
+
+The theme also adjusts the caret width (slightly thicker) and the dot size (more
+visible at a glance) to match the app's visual style.
+
+### Cursor color
+
+Each collaborator gets a deterministic color derived from their user ID. This is set
+in `SupabaseYjsProvider` when writing to awareness:
+
+```typescript
+provider.awareness.setLocalStateField('user', {
+  color: colorFromUserId(user.id),  // stable hex color
+  ...
+});
+```
+
+`yCollab` reads this color and applies it as inline CSS on the cursor elements, so
+no additional color management is needed in the theme.
+
+---
+
 ## Known Limitations
 
 - Yjs state is persisted only on explicit save (Ctrl+S / save button in collab mode). If a user closes the tab without saving, changes in Y.Doc are not persisted to the DB (but they ARE propagated to other connected peers in real time).

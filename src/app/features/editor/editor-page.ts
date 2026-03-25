@@ -17,7 +17,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { createTypstRenderer } from '@myriaddreamin/typst.ts';
 import { AssetService } from '../../core/service/asset/asset.service';
 import * as Y from 'yjs';
-import { CompilerService } from '../../core/service/compiler/compiler-service';
+import { CompilerService, CompileError, type DiagnosticMessage } from '../../core/service/compiler/compiler-service';
 import { AiService } from '../../core/service/ai/ai.service';
 import { SYSTEM_PROMPT, INLINE_PROMPT_ADDENDUM } from '../../core/service/ai/system-prompt';
 import { CollaborationService } from '../../core/service/collaboration/collaboration.service';
@@ -156,7 +156,7 @@ export class EditorPage implements OnInit, OnDestroy {
 
   readonly content       = signal('');
   readonly compiling      = signal(false);
-  readonly compileError   = signal<string | null>(null);
+  readonly compileError   = signal<DiagnosticMessage[] | null>(null);
   readonly errorExpanded  = signal(false);
 
   toggleErrorPanel(): void { this.errorExpanded.update((v) => !v); }
@@ -570,14 +570,22 @@ export class EditorPage implements OnInit, OnDestroy {
       const sources = this.projectFiles()
         .filter((f) => !f.isFolder)
         .map((f) => (f.name === this.activeFile() ? { ...f, content: source } : f));
-      const data = await this.compiler.compile(source, sources);
-      this.vectorData.set(data);
-      this.compileError.set(null);
+      const { vectorData, diagnostics } = await this.compiler.compile(source, sources);
+      this.vectorData.set(vectorData);
+      // Show warnings if any; clear errors from a previous failed compile.
+      const warnings = diagnostics.filter((d) => d.severity !== 'error');
+      this.compileError.set(warnings.length > 0 ? warnings : null);
       this.errorExpanded.set(false);
       this.compiling.set(false);
     } catch (err) {
       if (err instanceof Error && err.message.startsWith('Cancelled')) return;
-      this.compileError.set(err instanceof Error ? err.message : String(err));
+      // CompileError carries structured diagnostics from the compiler.
+      const diagnostics = err instanceof CompileError ? err.diagnostics : [];
+      this.compileError.set(
+        diagnostics.length > 0
+          ? diagnostics
+          : [{ severity: 'error', message: err instanceof Error ? err.message : String(err), path: '', range: '', package: '' }],
+      );
       this.compiling.set(false);
     }
   }
@@ -738,6 +746,25 @@ export class EditorPage implements OnInit, OnDestroy {
   }
 
   // ── Panel toggles ──────────────────────────────────────────────────────────
+
+  /** Returns the start position from a range string like "5:1-5:10" → "5:1". */
+  protected diagRangeStart(range: string): string {
+    const sep = range.indexOf('-');
+    return sep > -1 ? range.slice(0, sep) : range;
+  }
+
+  /** True when the diagnostic list contains at least one error (not just warnings). */
+  protected diagHasErrors(diags: DiagnosticMessage[]): boolean {
+    return diags.some((d) => d.severity === 'error');
+  }
+
+  /** Jumps the editor cursor to the location reported by a diagnostic. */
+  protected jumpToDiagnostic(diag: DiagnosticMessage): void {
+    if (!diag.range) return;
+    const m = /^(\d+):(\d+)/.exec(diag.range);
+    if (!m) return;
+    this.editorPanel()?.jumpToPosition(+m[1], +m[2]);
+  }
 
   toggleChat(): void    { this.chatOpen.update((v) => !v); }
   toggleFile(): void    { this.filesOpen.update((v) => !v); }

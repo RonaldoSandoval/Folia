@@ -1,6 +1,19 @@
 /// <reference lib="webworker" />
 import { $typst, loadFonts } from '@myriaddreamin/typst.ts';
 
+/**
+ * A single compiler diagnostic (error or warning).
+ * Mirrors the internal DiagnosticMessage shape from @myriaddreamin/typst.ts,
+ * which is not publicly exported so we redeclare it here.
+ */
+export interface DiagnosticMessage {
+  package:  string;
+  path:     string;
+  severity: string; // 'error' | 'warning'
+  range:    string; // "startLine:startCol-endLine:endCol"
+  message:  string;
+}
+
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
@@ -104,8 +117,8 @@ export type RemoveFileRequest = { type: 'remove-file'; path: string };
 export type WorkerRequest     = CompileRequest | ExportPdfRequest | AddFileRequest | RemoveFileRequest;
 
 export type CompileResponse =
-  | { id: string; type: 'success';     vectorData: Uint8Array }
-  | { id: string; type: 'error';       message: string }
+  | { id: string; type: 'success';     vectorData: Uint8Array; diagnostics: DiagnosticMessage[] }
+  | { id: string; type: 'error';       message: string;        diagnostics: DiagnosticMessage[] }
   | { id: string; type: 'pdf-success'; data: Uint8Array }
   | { id: string; type: 'pdf-error';   message: string };
 
@@ -168,7 +181,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
     const fingerprint = buildFingerprint(content, sources);
     if (fingerprint === lastFingerprint && lastVectorData) {
       postMessage(
-        { id, type: 'success', vectorData: lastVectorData } satisfies CompileResponse,
+        { id, type: 'success', vectorData: lastVectorData, diagnostics: [] } satisfies CompileResponse,
       );
       return;
     }
@@ -184,18 +197,36 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
       await $typst.addSource(`/${src.name}`, src.content);
     }
     await $typst.addSource('/main.typ', content);
-    const vectorData = await $typst.vector({ mainFilePath: '/main.typ', root: '/' });
 
-    if (!vectorData) {
-      throw new Error('Compiler returned no data');
+    // $typst (TypstSnippet) wraps the compiler but strips the diagnostics API.
+    // Use the underlying TypstCompiler directly to get structured diagnostics.
+    const compiler = await $typst.getCompiler();
+    const compileResult = await compiler.compile({
+      mainFilePath: '/main.typ',
+      root:         '/',
+      format:       0, // CompileFormatEnum.vector — not exported from public API
+      diagnostics:  'full',
+    });
+
+    const diagnostics: DiagnosticMessage[] = compileResult.diagnostics ?? [];
+
+    if (!compileResult.result) {
+      // Compilation failed — send structured diagnostics instead of a bare message.
+      postMessage({
+        id,
+        type: 'error',
+        message: 'Compilation failed',
+        diagnostics,
+      } satisfies CompileResponse);
+      return;
     }
 
-    lastVectorData = vectorData;
+    lastVectorData = compileResult.result;
 
     // Clone so we can transfer the buffer (transfer detaches it — lastVectorData stays intact).
-    const toSend = new Uint8Array(vectorData);
+    const toSend = new Uint8Array(compileResult.result);
     postMessage(
-      { id, type: 'success', vectorData: toSend } satisfies CompileResponse,
+      { id, type: 'success', vectorData: toSend, diagnostics } satisfies CompileResponse,
       [toSend.buffer],
     );
   } catch (err) {
@@ -203,6 +234,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
       id,
       type: 'error',
       message: err instanceof Error ? err.message : String(err),
+      diagnostics: [],
     } satisfies CompileResponse);
   }
 });

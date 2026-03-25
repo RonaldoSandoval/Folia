@@ -122,6 +122,7 @@
           <app-editor-panel
             [yjsBinding]="yjsBinding()"
             [readonly]="userRole() === 'viewer'"
+            [diagnostics]="compileError() ?? []"
             (contentChange)="onContentChange($event)"
             (askAi)="onAskAi($event)"
             (aiInlineCommand)="onAiInlineCommand($event)"
@@ -157,48 +158,35 @@
       ></div>
 
       <!-- Preview panel -->
-      <div class="flex flex-col flex-1 overflow-hidden">
+      <div class="flex flex-col flex-1 overflow-hidden relative">
         <div class="flex items-center h-8 px-3 border-b border-divider bg-surface shrink-0 gap-3">
           <span class="text-xs font-medium text-muted uppercase tracking-wider select-none flex-1">
             Vista previa
           </span>
 
-          @if (compileError()) {
-            <div class="flex flex-col items-end min-w-0">
-              <button
-                type="button"
-                class="flex items-center gap-1 text-xs text-red-500 hover:text-red-400
-                       transition-colors focus-visible:outline-none focus-visible:ring-1
-                       focus-visible:ring-red-500 rounded"
-                [attr.aria-expanded]="errorExpanded()"
-                aria-controls="compile-error-detail"
-                (click)="toggleErrorPanel()"
-              >
-                <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="12"/>
-                  <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <span class="truncate max-w-[12rem]">Error de compilación</span>
-                <svg class="w-3 h-3 shrink-0 transition-transform duration-150"
-                     [class.rotate-180]="errorExpanded()"
-                     viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </button>
-
-              @if (errorExpanded()) {
-                <div
-                  id="compile-error-detail"
-                  role="alert"
-                  class="mt-1 px-2 py-1.5 rounded bg-red-500/10 border border-red-500/30
-                         text-[11px] text-red-400 font-mono whitespace-pre-wrap break-all
-                         max-w-xs max-h-32 overflow-y-auto"
-                >{{ compileError() }}</div>
-              }
-            </div>
+          @if (compileError(); as diags) {
+            <button
+              type="button"
+              class="flex items-center gap-1.5 text-xs text-muted hover:text-foreground
+                     transition-colors focus-visible:outline-none focus-visible:ring-1
+                     focus-visible:ring-border rounded shrink-0"
+              [attr.aria-expanded]="errorExpanded()"
+              aria-controls="compile-error-detail"
+              (click)="toggleErrorPanel()"
+            >
+              <span
+                class="w-1.5 h-1.5 rounded-full shrink-0"
+                [class]="diagHasErrors(diags) ? 'bg-red-500' : 'bg-amber-500'"
+              ></span>
+              {{ diagHasErrors(diags) ? 'Error de compilación' : 'Advertencias' }}
+              ({{ diags.length }})
+              <svg class="w-3 h-3 shrink-0 transition-transform duration-150"
+                   [class.rotate-180]="errorExpanded()"
+                   viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
           }
 
           @if (compiling()) {
@@ -211,6 +199,50 @@
             </span>
           }
         </div>
+
+        <!-- Diagnostics panel — absolute overlay below the preview header -->
+        @if (errorExpanded() && compileError(); as diags) {
+          <div
+            id="compile-error-detail"
+            role="alert"
+            class="absolute top-8 inset-x-0 z-10 bg-surface border-b border-border
+                   divide-y divide-divider overflow-y-auto max-h-64 shadow-lg"
+          >
+            @for (diag of diags; track $index) {
+              <div
+                class="flex gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-surface-hover"
+                title="Ir a la línea"
+                (click)="jumpToDiagnostic(diag)"
+              >
+                <!-- Severity dot -->
+                <span
+                  class="shrink-0 w-1.5 h-1.5 rounded-full mt-1.5"
+                  [class]="diag.severity === 'error' ? 'bg-red-500' : 'bg-amber-500'"
+                ></span>
+
+                <div class="min-w-0 flex-1 space-y-0.5">
+                  <!-- Message -->
+                  <p class="text-xs font-mono text-foreground whitespace-pre-wrap break-words leading-relaxed">
+                    {{ diag.message }}
+                  </p>
+                  <!-- Location -->
+                  @if (diag.path) {
+                    <p class="text-[11px] font-mono text-muted">
+                      {{ diag.path }}{{ diag.range ? ':' + diagRangeStart(diag.range) : '' }}
+                    </p>
+                  }
+                </div>
+
+                <!-- Jump hint -->
+                <svg class="w-3.5 h-3.5 shrink-0 self-center text-icon" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </div>
+            }
+          </div>
+        }
+
         @if (!vectorData() && compiling()) {
           <!-- Skeleton while WASM compiles the first frame -->
           <div class="flex-1 overflow-hidden bg-[#f5f5f0] flex items-start justify-center p-8">

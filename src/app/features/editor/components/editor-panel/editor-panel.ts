@@ -13,9 +13,10 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Compartment, EditorState } from '@codemirror/state';
+import { Compartment, EditorState, StateEffect, StateField, RangeSetBuilder, Text } from '@codemirror/state';
 import { EditorView, basicSetup } from 'codemirror';
-import { keymap, placeholder } from '@codemirror/view';
+import { keymap, placeholder, GutterMarker, gutter, ViewPlugin, ViewUpdate, Decoration, DecorationSet } from '@codemirror/view';
+import type { DiagnosticMessage } from '../../../../core/service/compiler/compiler-service';
 import { search } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { yCollab } from 'y-codemirror.next';
@@ -26,6 +27,104 @@ import type * as Y from 'yjs';
 import { ThemeService } from '../../../../core/service/theme/theme-service';
 import { SearchPanel } from '../search-panel/search-panel';
 
+
+// ---------------------------------------------------------------------------
+// Diagnostics — module-level so extensions are shared across instances
+// ---------------------------------------------------------------------------
+
+/** Effect that pushes a new diagnostics array into the editor state. */
+const setDiagnosticsEffect = StateEffect.define<DiagnosticMessage[]>();
+
+/** State field that stores the current list of diagnostics. */
+const diagnosticsField = StateField.define<DiagnosticMessage[]>({
+  create: () => [],
+  update(value, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setDiagnosticsEffect)) return e.value;
+    }
+    return value;
+  },
+});
+
+/** Parses "startLine:startCol-endLine:endCol" into document offsets (1-based lines, 0-based cols). */
+function parseDiagRange(doc: Text, range: string): { from: number; to: number } | null {
+  const m = /^(\d+):(\d+)-(\d+):(\d+)$/.exec(range);
+  if (!m) return null;
+  const sl = +m[1], sc = +m[2], el = +m[3], ec = +m[4];
+  try {
+    const from = doc.line(sl).from + sc;
+    const to   = doc.line(el).from + ec;
+    return from < to ? { from, to } : null;
+  } catch {
+    return null;
+  }
+}
+
+class DiagGutterMarker extends GutterMarker {
+  constructor(private readonly sev: string) { super(); }
+  override toDOM(): HTMLElement {
+    const el = document.createElement('span');
+    el.className = this.sev === 'error' ? 'cm-diag-gutter-error' : 'cm-diag-gutter-warning';
+    return el;
+  }
+}
+
+const diagnosticGutter = gutter({
+  class: 'cm-diag-gutter',
+  markers(view) {
+    const diags = view.state.field(diagnosticsField);
+    const lineMap = new Map<number, string>(); // line → worst severity
+    for (const d of diags) {
+      if (!d.range || d.package) continue;
+      const m = /^(\d+)/.exec(d.range);
+      if (!m) continue;
+      const ln = +m[1];
+      if (!lineMap.has(ln) || d.severity === 'error') lineMap.set(ln, d.severity);
+    }
+    const builder = new RangeSetBuilder<GutterMarker>();
+    for (const [ln, sev] of [...lineMap.entries()].sort((a, b) => a[0] - b[0])) {
+      try {
+        const pos = view.state.doc.line(ln).from;
+        builder.add(pos, pos, new DiagGutterMarker(sev));
+      } catch { /* line out of bounds */ }
+    }
+    return builder.finish();
+  },
+});
+
+const diagnosticUnderlines = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) { this.decorations = this.build(view); }
+    update(update: ViewUpdate) {
+      if (
+        update.docChanged ||
+        update.state.field(diagnosticsField) !== update.startState.field(diagnosticsField)
+      ) {
+        this.decorations = this.build(update.view);
+      }
+    }
+    build(view: EditorView): DecorationSet {
+      const diags = view.state.field(diagnosticsField);
+      const ranges: { from: number; to: number; cls: string }[] = [];
+      for (const d of diags) {
+        if (!d.range || d.package) continue;
+        const parsed = parseDiagRange(view.state.doc, d.range);
+        if (!parsed) continue;
+        ranges.push({ ...parsed, cls: d.severity === 'error' ? 'cm-diag-error' : 'cm-diag-warning' });
+      }
+      ranges.sort((a, b) => a.from - b.from);
+      const builder = new RangeSetBuilder<Decoration>();
+      for (const { from, to, cls } of ranges) {
+        builder.add(from, to, Decoration.mark({ class: cls }));
+      }
+      return builder.finish();
+    }
+  },
+  { decorations: (v) => v.decorations },
+);
+
+// ---------------------------------------------------------------------------
 
 export interface YjsBinding {
   yText:     Y.Text;
@@ -74,6 +173,9 @@ export class EditorPanel implements OnDestroy {
 
   /** When true the editor is read-only (viewer role in collaborative mode). */
   readonly = input<boolean>(false);
+
+  /** Current compiler diagnostics — drives gutter markers and underline decorations. */
+  diagnostics = input<DiagnosticMessage[]>([]);
 
   /** Fired on every keystroke with the full document text (solo mode only). */
   contentChange = output<string>();
@@ -183,6 +285,20 @@ export class EditorPanel implements OnDestroy {
   });
 
 
+  private readonly diagnosticTheme = EditorView.theme({
+    '.cm-diag-error':   { textDecoration: 'underline wavy #ef4444', textUnderlineOffset: '3px' },
+    '.cm-diag-warning': { textDecoration: 'underline wavy #f59e0b', textUnderlineOffset: '3px' },
+    '.cm-diag-gutter':  { width: '8px' },
+    '.cm-diag-gutter-error': {
+      display: 'inline-block', width: '6px', height: '6px',
+      borderRadius: '50%', backgroundColor: '#ef4444', marginLeft: '1px',
+    },
+    '.cm-diag-gutter-warning': {
+      display: 'inline-block', width: '6px', height: '6px',
+      borderRadius: '50%', backgroundColor: '#f59e0b', marginLeft: '1px',
+    },
+  });
+
   private readonly lightTheme = EditorView.theme({
     '&':                     { backgroundColor: '#ffffff', color: '#000000' },
     '.cm-content':            { caretColor: '#000000' },
@@ -224,6 +340,13 @@ export class EditorPanel implements OnDestroy {
       this.view.dispatch({
         effects: this.readonlyCompartment.reconfigure(EditorView.editable.of(!ro)),
       });
+    });
+
+    // Push diagnostics into the editor state whenever the input changes.
+    effect(() => {
+      const diags = this.diagnostics();
+      if (!this.view) return;
+      this.view.dispatch({ effects: setDiagnosticsEffect.of(diags) });
     });
 
     // React to yjsBinding arriving after the view was already created.
@@ -470,6 +593,19 @@ export class EditorPanel implements OnDestroy {
     this.view.focus();
   }
 
+  /**
+   * Moves the cursor to the given 1-based line and 0-based column, then scrolls into view.
+   * Called from the diagnostics panel when the user clicks a diagnostic.
+   */
+  jumpToPosition(line: number, col: number): void {
+    if (!this.view) return;
+    try {
+      const pos = this.view.state.doc.line(line).from + col;
+      this.view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+      this.view.focus();
+    } catch { /* line out of bounds — ignore */ }
+  }
+
   /** Replaces the editor content (solo mode only). No-op in collaborative mode. */
   setContent(text: string): void {
     if (this.yjsBinding()) return;
@@ -558,6 +694,10 @@ export class EditorPanel implements OnDestroy {
       this.structuralTheme,
       this.collaboratorCursorTheme,
       this.searchTheme,
+      this.diagnosticTheme,
+      diagnosticsField,
+      diagnosticGutter,
+      diagnosticUnderlines,
       this.readonlyCompartment.of(EditorView.editable.of(!this.readonly())),
       selectionListener,
       placeholder('Empieza a escribir o presiona Ctrl+K para generar con IA…'),
